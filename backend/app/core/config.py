@@ -11,7 +11,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "Atlas AI Command Center"
+    app_name: str = "Atlas Smart Class Scheduler"
     app_env: str = "development"
     log_level: str = "INFO"
     debug: bool = False

@@ -1,65 +1,150 @@
 {
+  "/api/timetable/{id}": {
+    "GET": [
+      "ADMIN",
+      "DEVELOPER",
+      "USER"
+    ]
+  },
   "/api/users/me": {
-    "GET": ["ADMIN", "DEVELOPER", "USER"]
+    "GET": [
+      "ADMIN",
+      "DEVELOPER",
+      "USER"
+    ]
   },
   "/api/users": {
-    "GET": ["ADMIN"],
-    "POST": ["ADMIN"]
+    "GET": [
+      "ADMIN"
+    ],
+    "POST": [
+      "ADMIN"
+    ]
   },
   "/api/users/{id}": {
-    "GET": ["ADMIN"],
-    "PUT": ["ADMIN"],
-    "DELETE": ["ADMIN"]
+    "GET": [
+      "ADMIN"
+    ],
+    "PUT": [
+      "ADMIN"
+    ],
+    "DELETE": [
+      "ADMIN"
+    ]
   },
   "/api/admin/users": {
-    "GET": ["ADMIN"]
+    "GET": [
+      "ADMIN"
+    ]
   },
   "/api/admin/users/pending": {
-    "GET": ["ADMIN"]
+    "GET": [
+      "ADMIN"
+    ]
   },
   "/api/admin/users/{id}/approve": {
-    "POST": ["ADMIN"]
+    "POST": [
+      "ADMIN"
+    ]
   },
   "/api/admin/users/{id}/reject": {
-    "POST": ["ADMIN"]
+    "POST": [
+      "ADMIN"
+    ]
   },
   "/api/admin/audit": {
-    "GET": ["ADMIN"]
+    "GET": [
+      "ADMIN"
+    ]
   },
   "/api/admin/audit/export": {
-    "GET": ["ADMIN"]
+    "GET": [
+      "ADMIN"
+    ]
   },
   "/api/agents": {
-    "GET": ["ADMIN", "DEVELOPER"],
-    "POST": ["ADMIN", "DEVELOPER"]
+    "GET": [
+      "ADMIN",
+      "DEVELOPER"
+    ],
+    "POST": [
+      "ADMIN",
+      "DEVELOPER"
+    ]
   },
   "/api/agents/{id}": {
-    "GET": ["ADMIN", "DEVELOPER"],
-    "PUT": ["ADMIN", "DEVELOPER"],
-    "DELETE": ["ADMIN"]
+    "GET": [
+      "ADMIN",
+      "DEVELOPER"
+    ],
+    "PUT": [
+      "ADMIN",
+      "DEVELOPER"
+    ],
+    "DELETE": [
+      "ADMIN"
+    ]
   },
   "/api/telemetry": {
-    "POST": ["ADMIN", "DEVELOPER", "USER"]
+    "POST": [
+      "ADMIN",
+      "DEVELOPER",
+      "USER"
+    ]
   },
   "/api/ai/policies": {
-    "GET": ["ADMIN", "DEVELOPER", "USER"],
-    "POST": ["ADMIN", "DEVELOPER"]
+    "GET": [
+      "ADMIN",
+      "DEVELOPER",
+      "USER"
+    ],
+    "POST": [
+      "ADMIN",
+      "DEVELOPER"
+    ]
   },
   "/api/ai/policies/{id}": {
-    "GET": ["ADMIN", "DEVELOPER", "USER"],
-    "PUT": ["ADMIN", "DEVELOPER"],
-    "DELETE": ["ADMIN"]
+    "GET": [
+      "ADMIN",
+      "DEVELOPER",
+      "USER"
+    ],
+    "PUT": [
+      "ADMIN",
+      "DEVELOPER"
+    ],
+    "DELETE": [
+      "ADMIN"
+    ]
   },
   "/api/ai/policies/{id}/translate": {
-    "POST": ["ADMIN", "DEVELOPER"]
+    "POST": [
+      "ADMIN",
+      "DEVELOPER"
+    ]
   },
   "/api/ai/insights": {
-    "GET": ["ADMIN", "DEVELOPER", "USER"]
+    "GET": [
+      "ADMIN",
+      "DEVELOPER",
+      "USER"
+    ]
   },
   "/api/ai/insights/generate": {
-    "POST": ["ADMIN", "DEVELOPER"]
+    "POST": [
+      "ADMIN",
+      "DEVELOPER"
+    ]
   },
   "/api/ai/chat": {
-    "POST": ["ADMIN", "DEVELOPER", "USER"]
+    "POST": [
+      "ADMIN",
+      "DEVELOPER",
+      "USER"
+    ]
+  },
+  "/api/timetable": {
+    "GET": ["ADMIN", "DEVELOPER", "USER"],
+    "POST": ["ADMIN", "DEVELOPER"]
   }
 }

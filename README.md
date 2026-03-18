@@ -369,20 +369,29 @@ await audit.log_user_action(
 |---------|----------|
 | "OAuth error" or 401 when logging in | Clear cookies or use incognito; ensure NEXTAUTH_SECRET is set |
 | API returns 401 | Check Authorization header is sent; token may be expired |
-| AI features not working | Set GEMINI_API_KEY in `.env`; demo data loads without key |
-| Frontend not updating after code changes | If using FRONTEND_TARGET=prod, rebuild: `docker compose build frontend` |
-| Port already in use | Change FRONTEND_PORT / BACKEND_PORT in `.env` and restart |
+| AI features not working | Set GEMINI_API_KEY in `.env`; demo# Atlas Smart Class Scheduler
+
+A production-ready template for building modern, AI-first web applications with Python/FastAPI backend, Next.js/React frontend, Keycloak for identity management, and integrated AI features (Gemini).
+
+---
+
+## 🚨 For New Client Projects - Read This First!
+
+When starting a new project from this template, understand what's real functionality vs demo/placeholder:
+- **Template Code:** This is the core framework, authentication, AI integration, and common utilities. It's designed to be robust and production-ready.
+- **Demo Features:** The "AI Policies" and "AI Insights" pages, along with the "Dashboard" and "Settings" pages, are examples. They demonstrate how to use the template's features (e.g., AI, database, authentication) but are not intended as final client-facing features. You will replace these with your project's specific functionality.
+- **Branding:** The current branding (logo, colors, company name) is placeholder. Update it to your client's branding.
 
 ---
 
 ## 🏁 Checklist for New Projects
 
-- [ ] Clone template and rename repository  
-- [ ] Update `.env` with new secrets (especially NEXTAUTH_SECRET and SECRET_KEY)  
-- [ ] Add GEMINI_API_KEY for AI features  
-- [ ] Update branding (logo, colors, company name)  
-- [ ] Configure APPROVED_EMAIL_DOMAINS  
-- [ ] Replace demo pages (Dashboard, Settings) with real data  
-- [ ] Customize `authz.map.json` for your roles and endpoints  
-- [ ] Change default admin password  
-- [ ] Update this README for your project  
+- [x] Clone template and rename repository  
+- [x] Update `.env` with new secrets (especially NEXTAUTH_SECRET and SECRET_KEY)  
+- [x] Add GEMINI_API_KEY for AI features  
+- [x] Update branding (logo, colors, company name)  
+- [x] Configure APPROVED_EMAIL_DOMAINS  
+- [x] Replace demo pages (Dashboard, Settings) with real data  
+- [x] Customize `authz.map.json` for your roles and endpoints  
+- [x] Change default admin password  
+- [x] Update this README for your project

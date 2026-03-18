@@ -29,9 +29,9 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Command Center Overview</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Atlas Smart Class Scheduler</h1>
           <p className="text-slate-600 mt-0.5">
-            Real-time status of Atlas University&apos;s agentic ecosystem.
+            Real-time status of Atlas University&apos;s Smart Class Scheduler ecosystem.
           </p>
         </div>
         <button

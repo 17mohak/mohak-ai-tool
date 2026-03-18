@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Atlas AI Command Center",
-  description: "Atlas Skilltech University Command Center",
+  title: "Atlas Smart Class Scheduler",
+  description: "Atlas Skilltech University Smart Class Scheduler",
 };
 
 export default function RootLayout({
