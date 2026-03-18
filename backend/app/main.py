@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-
+from app.api import auth, users, agents, telemetry, admin, ai, timetable
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -43,7 +43,7 @@ app.add_middleware(
 )
 
 app.add_middleware(AuditLoggingMiddleware)
-
+app.include_router(timetable.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")

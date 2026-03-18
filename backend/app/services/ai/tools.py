@@ -1,153 +1,78 @@
 from typing import List, Dict, Any
 from google.ai.generativelanguage_v1beta.types import content
 
-
 def get_chat_tools() -> List[content.Tool]:
     """Get list of tools available to the AI chat assistant."""
     
-    get_user_info = content.FunctionDeclaration(
-        name="get_user_info",
-        description="Get information about a user by email or ID",
+    # ... [Keep your existing tools: get_user_info, get_system_stats, etc.] ...
+
+    run_schedule_optimization = content.FunctionDeclaration(
+        name="run_schedule_optimization",
+        description="Run the AI constraint solver to generate a university timetable for a specific department.",
         parameters=content.Schema(
             type=content.Type.OBJECT,
             properties={
-                "user_identifier": content.Schema(
-                    type=content.Type.STRING,
-                    description="User email or ID"
-                )
-            },
-            required=["user_identifier"]
-        )
-    )
-    
-    get_system_stats = content.FunctionDeclaration(
-        name="get_system_stats",
-        description="Get current system statistics and metrics",
-        parameters=content.Schema(
-            type=content.Type.OBJECT,
-            properties={
-                "metric_type": content.Schema(
-                    type=content.Type.STRING,
-                    description="Type of metrics: 'performance', 'usage', 'errors', or 'all'",
-                    enum=["performance", "usage", "errors", "all"]
-                )
-            }
-        )
-    )
-    
-    search_audit_logs = content.FunctionDeclaration(
-        name="search_audit_logs",
-        description="Search audit logs for specific actions or users",
-        parameters=content.Schema(
-            type=content.Type.OBJECT,
-            properties={
-                "query": content.Schema(
-                    type=content.Type.STRING,
-                    description="Search query"
-                ),
-                "limit": content.Schema(
+                "department_id": content.Schema(
                     type=content.Type.INTEGER,
-                    description="Maximum number of results (default: 10)"
+                    description="The ID of the department to schedule (e.g., 1 for Computer Science)"
                 )
             },
-            required=["query"]
-        )
-    )
-    
-    create_policy = content.FunctionDeclaration(
-        name="create_policy",
-        description="Create a new access control policy",
-        parameters=content.Schema(
-            type=content.Type.OBJECT,
-            properties={
-                "name": content.Schema(
-                    type=content.Type.STRING,
-                    description="Policy name"
-                ),
-                "description": content.Schema(
-                    type=content.Type.STRING,
-                    description="Policy description"
-                ),
-                "rule": content.Schema(
-                    type=content.Type.STRING,
-                    description="Natural language rule"
-                )
-            },
-            required=["name", "rule"]
+            required=["department_id"]
         )
     )
     
     return [content.Tool(function_declarations=[
-        get_user_info,
-        get_system_stats,
-        search_audit_logs,
-        create_policy,
+        # Add your original tools here too
+        run_schedule_optimization,
     ])]
-
 
 async def execute_tool(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     """Execute a tool function and return results."""
     
-    if tool_name == "get_user_info":
-        return {
-            "user_identifier": args.get("user_identifier"),
-            "status": "active",
-            "role": "DEVELOPER",
-            "last_login": "2026-03-14T10:30:00Z",
-            "message": "User information retrieved successfully"
-        }
-    
-    elif tool_name == "get_system_stats":
-        metric_type = args.get("metric_type", "all")
-        return {
-            "metric_type": metric_type,
-            "timestamp": "2026-03-15T12:00:00Z",
-            "performance": {
-                "avg_response_time_ms": 245,
-                "p95_response_time_ms": 680,
-                "cpu_usage_percent": 45,
-                "memory_usage_percent": 62
-            },
-            "usage": {
-                "active_users": 127,
-                "api_requests_today": 15432,
-                "database_queries": 8921
-            },
-            "errors": {
-                "error_rate_percent": 0.8,
-                "total_errors_today": 23
-            }
-        }
-    
-    elif tool_name == "search_audit_logs":
-        query = args.get("query", "")
-        limit = args.get("limit", 10)
-        return {
-            "query": query,
-            "total_found": 3,
-            "results": [
-                {
-                    "timestamp": "2026-03-15T11:45:00Z",
-                    "action": "user.approve",
-                    "user": "admin@atlasuniversity.edu.in",
-                    "details": f"Matched query: {query}"
-                },
-                {
-                    "timestamp": "2026-03-15T10:30:00Z",
-                    "action": "policy.create",
-                    "user": "developer@atlasuniversity.edu.in",
-                    "details": f"Related to: {query}"
-                }
-            ]
-        }
-    
-    elif tool_name == "create_policy":
-        return {
-            "policy_id": 12345,
-            "name": args.get("name"),
-            "status": "created",
-            "message": "Policy created successfully and will be translated to DSL"
-        }
-    
+    # ... [Keep your existing tool executions] ...
+
+    if tool_name == "run_schedule_optimization":
+        department_id = args.get("department_id")
+        if not department_id:
+            return {"error": "department_id is required"}
+
+        try:
+            # 1. Dynamic imports to avoid circular dependency issues on startup
+            from app.modules.timetable_ai.solver import generate_schedule
+            from app.core.database import async_session_maker
+            from app.api.telemetry import broadcast
+
+            # 2. Fire telemetry to update the Next.js Dashboard instantly
+            await broadcast.broadcast({
+                "type": "task_log",
+                "agent_id": 999, # Dummy ID for the UI
+                "agent_name": "Timetable AI",
+                "task_description": f"Generating schedule for Dept {department_id}",
+                "task_status": "Running"
+            })
+
+            # 3. Spin up an async DB session and run Claude's OR-Tools Solver
+            async with async_session_maker() as db:
+                result = await generate_schedule(db, department_id)
+
+            # 4. Parse the result and update the dashboard UI via WebSocket
+            is_success = result.get("status") in ["SUCCESS", "OPTIMAL", "FEASIBLE"]
+            final_status = "Success" if is_success else "Failed"
+            
+            await broadcast.broadcast({
+                "type": "task_log",
+                "agent_id": 999,
+                "agent_name": "Timetable AI",
+                "task_description": f"Schedule generation finished: {result.get('status')}",
+                "task_status": final_status
+            })
+
+            return result
+
+        except ImportError as e:
+            return {"error": f"Solver module not implemented yet: {str(e)}"}
+        except Exception as e:
+            return {"error": f"Solver execution failed: {str(e)}"}
+
     else:
         return {"error": f"Unknown tool: {tool_name}"}
