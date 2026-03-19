@@ -1,0 +1,590 @@
+[
+{
+  "model": "api.department",
+  "pk": 12,
+  "fields": {
+    "name": "uGDX"
+  }
+},
+{
+  "model": "api.department",
+  "pk": 13,
+  "fields": {
+    "name": "ISME"
+  }
+},
+{
+  "model": "api.department",
+  "pk": 14,
+  "fields": {
+    "name": "ISDI"
+  }
+},
+{
+  "model": "api.department",
+  "pk": 15,
+  "fields": {
+    "name": "LAW"
+  }
+},
+{
+  "model": "api.studentbatch",
+  "pk": 40,
+  "fields": {
+    "name": "SY Voyagers",
+    "size": 60,
+    "department": 12,
+    "parent_batch": null,
+    "max_classes_per_day": 6
+  }
+},
+{
+  "model": "api.studentbatch",
+  "pk": 41,
+  "fields": {
+    "name": "SY Hadoop",
+    "size": 60,
+    "department": 12,
+    "parent_batch": null,
+    "max_classes_per_day": 6
+  }
+},
+{
+  "model": "api.studentbatch",
+  "pk": 42,
+  "fields": {
+    "name": "SY Voyagers - Lab A",
+    "size": 30,
+    "department": 12,
+    "parent_batch": 40,
+    "max_classes_per_day": 6
+  }
+},
+{
+  "model": "api.studentbatch",
+  "pk": 43,
+  "fields": {
+    "name": "SY Voyagers - Lab B",
+    "size": 30,
+    "department": 12,
+    "parent_batch": 40,
+    "max_classes_per_day": 6
+  }
+},
+{
+  "model": "api.studentbatch",
+  "pk": 44,
+  "fields": {
+    "name": "SY Hadoop - Lab A",
+    "size": 30,
+    "department": 12,
+    "parent_batch": 41,
+    "max_classes_per_day": 6
+  }
+},
+{
+  "model": "api.studentbatch",
+  "pk": 45,
+  "fields": {
+    "name": "SY Hadoop - Lab B",
+    "size": 30,
+    "department": 12,
+    "parent_batch": 41,
+    "max_classes_per_day": 6
+  }
+},
+{
+  "model": "api.studentbatch",
+  "pk": 46,
+  "fields": {
+    "name": "BBA",
+    "size": 120,
+    "department": 13,
+    "parent_batch": null,
+    "max_classes_per_day": 6
+  }
+},
+{
+  "model": "api.studentbatch",
+  "pk": 47,
+  "fields": {
+    "name": "BSc FInance",
+    "size": 120,
+    "department": 13,
+    "parent_batch": null,
+    "max_classes_per_day": 6
+  }
+},
+{
+  "model": "api.studentbatch",
+  "pk": 48,
+  "fields": {
+    "name": "Economics",
+    "size": 60,
+    "department": 13,
+    "parent_batch": 46,
+    "max_classes_per_day": 6
+  }
+},
+{
+  "model": "api.studentbatch",
+  "pk": 49,
+  "fields": {
+    "name": "Finance",
+    "size": 60,
+    "department": 13,
+    "parent_batch": 46,
+    "max_classes_per_day": 6
+  }
+},
+{
+  "model": "api.teacher",
+  "pk": 53,
+  "fields": {
+    "user": 55,
+    "name": "Sohel Das",
+    "email": "sohel.das@university.edu",
+    "department": 12,
+    "preferred_start_slot": 0,
+    "preferred_end_slot": 8,
+    "max_classes_per_day": 4
+  }
+},
+{
+  "model": "api.teacher",
+  "pk": 54,
+  "fields": {
+    "user": 56,
+    "name": "Shashikant Patil",
+    "email": "shashikant.patil@university.edu",
+    "department": 12,
+    "preferred_start_slot": 0,
+    "preferred_end_slot": 8,
+    "max_classes_per_day": 4
+  }
+},
+{
+  "model": "api.teacher",
+  "pk": 55,
+  "fields": {
+    "user": 57,
+    "name": "Yogesh Jadhav",
+    "email": "yogesh.jadhav@university.edu",
+    "department": 12,
+    "preferred_start_slot": 0,
+    "preferred_end_slot": 8,
+    "max_classes_per_day": 4
+  }
+},
+{
+  "model": "api.teacher",
+  "pk": 56,
+  "fields": {
+    "user": 58,
+    "name": "Nimesh Bumb",
+    "email": "nimesh.bumb@university.edu",
+    "department": 12,
+    "preferred_start_slot": 0,
+    "preferred_end_slot": 8,
+    "max_classes_per_day": 4
+  }
+},
+{
+  "model": "api.teacher",
+  "pk": 57,
+  "fields": {
+    "user": 59,
+    "name": "Sujatha Ayyengar",
+    "email": "sujatha.ayyengar@university.edu",
+    "department": 12,
+    "preferred_start_slot": 0,
+    "preferred_end_slot": 8,
+    "max_classes_per_day": 4
+  }
+},
+{
+  "model": "api.teacher",
+  "pk": 58,
+  "fields": {
+    "user": 60,
+    "name": "Kunal Meher",
+    "email": "kunal.meher@university.edu",
+    "department": 12,
+    "preferred_start_slot": 0,
+    "preferred_end_slot": 8,
+    "max_classes_per_day": 4
+  }
+},
+{
+  "model": "api.teacher",
+  "pk": 59,
+  "fields": {
+    "user": 61,
+    "name": "Firoz Shaikh",
+    "email": "firoz.shaikh@university.edu",
+    "department": 12,
+    "preferred_start_slot": 0,
+    "preferred_end_slot": 8,
+    "max_classes_per_day": 4
+  }
+},
+{
+  "model": "api.teacher",
+  "pk": 60,
+  "fields": {
+    "user": 62,
+    "name": "Elective Faculty 1",
+    "email": "elective.faculty1@university.edu",
+    "department": 12,
+    "preferred_start_slot": 0,
+    "preferred_end_slot": 8,
+    "max_classes_per_day": 4
+  }
+},
+{
+  "model": "api.teacher",
+  "pk": 61,
+  "fields": {
+    "user": 63,
+    "name": "Elective Faculty 2",
+    "email": "elective.faculty2@university.edu",
+    "department": 12,
+    "preferred_start_slot": 0,
+    "preferred_end_slot": 8,
+    "max_classes_per_day": 4
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 143,
+  "fields": {
+    "name": "Advanced Machine Learning",
+    "code": "AML501",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 40,
+    "teacher": 53
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 144,
+  "fields": {
+    "name": "Advanced Machine Learning",
+    "code": "AML501",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 41,
+    "teacher": 53
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 145,
+  "fields": {
+    "name": "Business Plan Writing",
+    "code": "BPW502",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 40,
+    "teacher": 54
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 146,
+  "fields": {
+    "name": "Business Plan Writing",
+    "code": "BPW502",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 41,
+    "teacher": 54
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 147,
+  "fields": {
+    "name": "Data Engineering Operations",
+    "code": "DEO503",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 40,
+    "teacher": 55
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 148,
+  "fields": {
+    "name": "Data Engineering Operations",
+    "code": "DEO503",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 41,
+    "teacher": 55
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 149,
+  "fields": {
+    "name": "Data Engineering Operations - Lab",
+    "code": "DEO503L",
+    "weekly_lectures": 1,
+    "department": 12,
+    "batch": 42,
+    "teacher": 55
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 150,
+  "fields": {
+    "name": "Data Engineering Operations - Lab",
+    "code": "DEO503L",
+    "weekly_lectures": 1,
+    "department": 12,
+    "batch": 43,
+    "teacher": 55
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 151,
+  "fields": {
+    "name": "Data Engineering Operations - Lab",
+    "code": "DEO503L",
+    "weekly_lectures": 1,
+    "department": 12,
+    "batch": 44,
+    "teacher": 55
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 152,
+  "fields": {
+    "name": "Data Engineering Operations - Lab",
+    "code": "DEO503L",
+    "weekly_lectures": 1,
+    "department": 12,
+    "batch": 45,
+    "teacher": 55
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 153,
+  "fields": {
+    "name": "Introduction to Algorithms",
+    "code": "ITA504",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 40,
+    "teacher": 56
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 154,
+  "fields": {
+    "name": "Introduction to Algorithms",
+    "code": "ITA504",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 41,
+    "teacher": 56
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 155,
+  "fields": {
+    "name": "Large-Scale Data Storage",
+    "code": "LDS505",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 40,
+    "teacher": 57
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 156,
+  "fields": {
+    "name": "Large-Scale Data Storage",
+    "code": "LDS505",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 41,
+    "teacher": 57
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 157,
+  "fields": {
+    "name": "DevOps and MLOps",
+    "code": "DOM506",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 40,
+    "teacher": 58
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 158,
+  "fields": {
+    "name": "DevOps and MLOps",
+    "code": "DOM506",
+    "weekly_lectures": 3,
+    "department": 12,
+    "batch": 41,
+    "teacher": 58
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 159,
+  "fields": {
+    "name": "DevOps and MLOps - Lab",
+    "code": "DOM506L",
+    "weekly_lectures": 1,
+    "department": 12,
+    "batch": 42,
+    "teacher": 58
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 160,
+  "fields": {
+    "name": "DevOps and MLOps - Lab",
+    "code": "DOM506L",
+    "weekly_lectures": 1,
+    "department": 12,
+    "batch": 43,
+    "teacher": 58
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 161,
+  "fields": {
+    "name": "DevOps and MLOps - Lab",
+    "code": "DOM506L",
+    "weekly_lectures": 1,
+    "department": 12,
+    "batch": 44,
+    "teacher": 58
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 162,
+  "fields": {
+    "name": "DevOps and MLOps - Lab",
+    "code": "DOM506L",
+    "weekly_lectures": 1,
+    "department": 12,
+    "batch": 45,
+    "teacher": 58
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 163,
+  "fields": {
+    "name": "Career Services",
+    "code": "CS507",
+    "weekly_lectures": 2,
+    "department": 12,
+    "batch": 40,
+    "teacher": 59
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 164,
+  "fields": {
+    "name": "Career Services",
+    "code": "CS507",
+    "weekly_lectures": 2,
+    "department": 12,
+    "batch": 41,
+    "teacher": 59
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 165,
+  "fields": {
+    "name": "Elective",
+    "code": "ELEC500",
+    "weekly_lectures": 2,
+    "department": 12,
+    "batch": 40,
+    "teacher": 60
+  }
+},
+{
+  "model": "api.subject",
+  "pk": 166,
+  "fields": {
+    "name": "Elective",
+    "code": "ELEC500",
+    "weekly_lectures": 2,
+    "department": 12,
+    "batch": 41,
+    "teacher": 61
+  }
+},
+{
+  "model": "api.room",
+  "pk": 36,
+  "fields": {
+    "name": "Room 101",
+    "capacity": 60,
+    "is_lab": false
+  }
+},
+{
+  "model": "api.room",
+  "pk": 37,
+  "fields": {
+    "name": "Room 102",
+    "capacity": 60,
+    "is_lab": false
+  }
+},
+{
+  "model": "api.room",
+  "pk": 38,
+  "fields": {
+    "name": "Room 103",
+    "capacity": 60,
+    "is_lab": false
+  }
+},
+{
+  "model": "api.room",
+  "pk": 39,
+  "fields": {
+    "name": "Room 101A",
+    "capacity": 30,
+    "is_lab": true
+  }
+},
+{
+  "model": "api.room",
+  "pk": 40,
+  "fields": {
+    "name": "Room 101B",
+    "capacity": 30,
+    "is_lab": true
+  }
+}
+]
