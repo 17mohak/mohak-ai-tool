@@ -6,7 +6,7 @@ from app.services.ai.tools import get_chat_tools, execute_tool
 class ChatService:
     """Service for AI Manager chat functionality."""
 
-    SYSTEM_INSTRUCTION = """You are the Atlas AI Manager, an intelligent assistant for the Atlas AI Command Center.
+    SYSTEM_INSTRUCTION = """You are the Atlas AI Manager, an intelligent assistant for the Atlas Smart Class Scheduler.
 
 Your capabilities:
 - Help users understand system status and metrics
@@ -15,6 +15,14 @@ Your capabilities:
 - Search and analyze audit logs
 - Provide insights and recommendations
 - Answer questions about the platform
+- Generate class timetables for departments by name (e.g. "uGDX", "ISME", "ISDI", "LAW")
+- List available departments and their batches
+
+IMPORTANT RULES:
+- When a user asks to generate a timetable, use their department NAME to call the run_schedule_optimization tool.
+- NEVER ask for a numeric department ID. Always accept department names.
+- If unsure which department the user means, call list_departments to show options.
+- After generating a timetable, tell the user to visit the Timetable page to view it.
 
 Current context:
 - User: {user_email} ({user_role})
@@ -61,9 +69,37 @@ Be helpful, concise, and proactive. Use available tools when needed. If you don'
                     "result": result
                 })
 
+            content = response.get("content", "") or ""
+
+            # Fallback: if Gemini returned no text but tools ran, build a
+            # short summary so the frontend never receives an empty bubble.
+            if not content.strip() and tool_results:
+                summaries = []
+                for tr in tool_results:
+                    tool_name = tr["tool"]
+                    res = tr["result"]
+                    if isinstance(res, dict) and res.get("error"):
+                        summaries.append(f"**{tool_name}** — ⚠️ {res['error']}")
+                    elif isinstance(res, dict) and res.get("status"):
+                        summaries.append(
+                            f"**{tool_name}** — {res['status']}"
+                        )
+                    else:
+                        summaries.append(f"**{tool_name}** — completed")
+                content = (
+                    "I ran the following actions:\n\n"
+                    + "\n".join(f"• {s}" for s in summaries)
+                    + "\n\nLet me know if you need anything else!"
+                )
+            elif not content.strip():
+                content = (
+                    "I wasn't able to generate a response this time. "
+                    "Please try rephrasing your question."
+                )
+
             return {
                 "role": "assistant",
-                "content": response["content"],
+                "content": content,
                 "tool_calls": tool_results,
             }
 

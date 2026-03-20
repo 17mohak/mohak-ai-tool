@@ -5,32 +5,38 @@ Production-grade constraint-programming engine that generates a
 conflict-free weekly class schedule for a given department.
 
 Uses Google OR-Tools CP-SAT to enforce hard constraints:
-  1. Subject Fulfillment  – each batch meets every subject exactly `credits` times.
+  1. Subject Fulfillment  – each (batch, subject) pair meets exactly `credits` times.
   2. Teacher Conflict     – a teacher appears in at most one slot per (day, period).
   3. Room Conflict        – a room is used by at most one class per (day, period).
   4. Batch Conflict       – a batch attends at most one class per (day, period).
 
 The heavy CP-SAT solve is offloaded to a thread via ``asyncio.to_thread``
 so the FastAPI event loop is never blocked.
+
+After a successful solve the schedule is persisted as ScheduleSlot rows
+linked to a new TimetableRun.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from itertools import product as cartesian
 from typing import Any
 
 from ortools.sat.python import cp_model
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.timetable import (
     Batch,
     DayOfWeek,
+    Department,
     Room,
+    RunStatus,
+    ScheduleSlot,
     Subject,
     Teacher,
+    TimetableRun,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,7 +52,6 @@ DAYS: list[DayOfWeek] = [
     DayOfWeek.FRIDAY,
 ]
 
-# Four teaching periods per day
 SLOTS: list[dict[str, Any]] = [
     {"index": 0, "label": "09:00 – 10:30"},
     {"index": 1, "label": "11:00 – 12:30"},
@@ -58,6 +63,33 @@ SLOT_INDICES: list[int] = [s["index"] for s in SLOTS]
 NUM_DAYS = len(DAYS)
 NUM_SLOTS = len(SLOT_INDICES)
 TOTAL_WEEKLY_PERIODS = NUM_DAYS * NUM_SLOTS  # 20
+
+
+# ──────────────────────────────────────────────
+# Name-based resolution helpers
+# ──────────────────────────────────────────────
+async def resolve_department(db: AsyncSession, name: str) -> Department | None:
+    """Case-insensitive department lookup by name."""
+    result = await db.execute(
+        select(Department).where(Department.name.ilike(name))
+    )
+    return result.scalar_one_or_none()
+
+
+async def list_departments(db: AsyncSession) -> list[Department]:
+    result = await db.execute(select(Department).order_by(Department.name))
+    return list(result.scalars().all())
+
+
+async def list_batches_for_department(
+    db: AsyncSession, department_id: int
+) -> list[Batch]:
+    result = await db.execute(
+        select(Batch)
+        .where(Batch.department_id == department_id)
+        .order_by(Batch.name)
+    )
+    return list(result.scalars().all())
 
 
 # ──────────────────────────────────────────────
@@ -103,50 +135,43 @@ def _solve(
     """
     Build and solve the CP-SAT model.
 
-    All arguments are plain dicts (serialisable) so this function carries
-    no SQLAlchemy session state and is safe to run in ``asyncio.to_thread``.
+    Each subject dict now carries ``batch_id`` and ``teacher_id`` from the
+    seed data, so we use the *actual* assigned teacher rather than a
+    round-robin mapping.
     """
 
-    # ── quick-indexes ────────────────────────
     teacher_map = {t["id"]: t for t in teachers}
-    subject_map = {s["id"]: s for s in subjects}
-    room_map = {r["id"]: r for r in rooms}
     batch_map = {b["id"]: b for b in batches}
 
-    # Simple 1-teacher-per-subject mapping (round-robin assignment)
-    # Maps subject_id -> teacher_id
-    subject_teacher: dict[int, int] = {}
-    teacher_ids = [t["id"] for t in teachers]
-    if not teacher_ids:
+    if not teachers:
         return {
             "status": "INFEASIBLE",
             "reason": "No teachers found for this department.",
         }
-    for idx, subj in enumerate(subjects):
-        subject_teacher[subj["id"]] = teacher_ids[idx % len(teacher_ids)]
 
     model = cp_model.CpModel()
 
     # ── decision variables ───────────────────
-    # x[b, s, t, r, d, p] ∈ {0, 1}
-    # "Batch b learns Subject s from Teacher t in Room r on Day d, Period p"
+    # x[b_id, s_id, t_id, r_id, d_idx, p] ∈ {0, 1}
     x: dict[tuple[int, int, int, int, int, int], Any] = {}
 
-    for b in batches:
-        for s in subjects:
-            t_id = subject_teacher[s["id"]]
-            for r in rooms:
-                # ── pre-filter: skip if room too small ──
-                if r["capacity"] < b["size"]:
-                    continue
-                for d_idx, day in enumerate(DAYS):
-                    for p in SLOT_INDICES:
-                        key = (b["id"], s["id"], t_id, r["id"], d_idx, p)
-                        var_name = (
-                            f"x_b{b['id']}_s{s['id']}_t{t_id}"
-                            f"_r{r['id']}_d{d_idx}_p{p}"
-                        )
-                        x[key] = model.NewBoolVar(var_name)
+    for s in subjects:
+        b_id = s["batch_id"]
+        t_id = s["teacher_id"]
+        b = batch_map.get(b_id)
+        if b is None:
+            continue  # orphan subject row
+        for r in rooms:
+            if r["capacity"] < b["size"]:
+                continue
+            for d_idx in range(NUM_DAYS):
+                for p in SLOT_INDICES:
+                    key = (b_id, s["id"], t_id, r["id"], d_idx, p)
+                    var_name = (
+                        f"x_b{b_id}_s{s['id']}_t{t_id}"
+                        f"_r{r['id']}_d{d_idx}_p{p}"
+                    )
+                    x[key] = model.NewBoolVar(var_name)
 
     if not x:
         return {
@@ -158,29 +183,29 @@ def _solve(
         }
 
     # ── HARD CONSTRAINT 1: Subject Fulfillment ──
-    # Each (batch, subject) pair must be scheduled exactly `credits` times.
-    for b in batches:
-        for s in subjects:
-            t_id = subject_teacher[s["id"]]
-            slot_vars = [
-                x[key]
-                for key in x
-                if key[0] == b["id"] and key[1] == s["id"] and key[2] == t_id
-            ]
-            if slot_vars:
-                model.Add(sum(slot_vars) == s["credits"])
-            else:
-                # No feasible room for this batch-subject → infeasible
-                return {
-                    "status": "INFEASIBLE",
-                    "reason": (
-                        f"No room large enough for batch '{b['name']}' "
-                        f"(size {b['size']}) to attend subject '{s['name']}'."
-                    ),
-                }
+    for s in subjects:
+        b_id = s["batch_id"]
+        t_id = s["teacher_id"]
+        if b_id not in batch_map:
+            continue
+        slot_vars = [
+            x[key]
+            for key in x
+            if key[0] == b_id and key[1] == s["id"] and key[2] == t_id
+        ]
+        if slot_vars:
+            model.Add(sum(slot_vars) == s["credits"])
+        else:
+            b = batch_map[b_id]
+            return {
+                "status": "INFEASIBLE",
+                "reason": (
+                    f"No room large enough for batch '{b['name']}' "
+                    f"(size {b['size']}) to attend subject '{s['name']}'."
+                ),
+            }
 
     # ── HARD CONSTRAINT 2: Teacher Conflict ──
-    # A teacher teaches at most 1 class per (day, slot).
     for t in teachers:
         for d_idx in range(NUM_DAYS):
             for p in SLOT_INDICES:
@@ -193,7 +218,6 @@ def _solve(
                     model.Add(sum(vars_for_teacher) <= 1)
 
     # ── HARD CONSTRAINT 3: Room Conflict ──
-    # A room hosts at most 1 class per (day, slot).
     for r in rooms:
         for d_idx in range(NUM_DAYS):
             for p in SLOT_INDICES:
@@ -206,7 +230,6 @@ def _solve(
                     model.Add(sum(vars_for_room) <= 1)
 
     # ── HARD CONSTRAINT 4: Batch Conflict ──
-    # A batch attends at most 1 class per (day, slot).
     for b in batches:
         for d_idx in range(NUM_DAYS):
             for p in SLOT_INDICES:
@@ -220,8 +243,8 @@ def _solve(
 
     # ── Solve ────────────────────────────────
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 60.0  # hard time-limit
-    solver.parameters.num_workers = 4              # parallel search
+    solver.parameters.max_time_in_seconds = 60.0
+    solver.parameters.num_workers = 4
     solver.parameters.log_search_progress = False
 
     logger.info("CP-SAT solver started …")
@@ -244,9 +267,7 @@ def _solve(
                     }
                 )
 
-        # Sort for deterministic output: batch → day → slot
         schedule.sort(key=lambda e: (e["batch_id"], e["day"], e["slot_index"]))
-
         return {"status": "SUCCESS", "schedule": schedule}
 
     return {
@@ -266,13 +287,9 @@ async def generate_schedule(
     department_id: int,
 ) -> dict:
     """
-    Generate a conflict-free weekly timetable for *department_id*.
-
-    Returns
-    -------
-    dict
-        ``{"status": "SUCCESS", "schedule": [...]}`` on success, or
-        ``{"status": "INFEASIBLE", "reason": "..."}`` on failure.
+    Generate a conflict-free weekly timetable for *department_id*,
+    persist the result as ScheduleSlot rows under a new TimetableRun,
+    and return a summary dict.
     """
 
     # Step A – fetch data
@@ -302,9 +319,12 @@ async def generate_schedule(
             "reason": "No batches registered for this department.",
         }
 
-    # Validate that total weekly periods can accommodate the credit load
+    batch_map = {b.id: b for b in batches}
+
+    # Validate credit load per batch
     for batch in batches:
-        total_credits = sum(s.credits for s in subjects)
+        batch_subjects = [s for s in subjects if s.batch_id == batch.id]
+        total_credits = sum(s.credits for s in batch_subjects)
         if total_credits > TOTAL_WEEKLY_PERIODS:
             return {
                 "status": "INFEASIBLE",
@@ -318,7 +338,15 @@ async def generate_schedule(
     # Serialise ORM objects to plain dicts (thread-safe)
     teachers_data = [{"id": t.id, "name": t.name} for t in teachers]
     subjects_data = [
-        {"id": s.id, "name": s.name, "credits": s.credits} for s in subjects
+        {
+            "id": s.id,
+            "name": s.name,
+            "credits": s.credits,
+            "batch_id": s.batch_id,
+            "teacher_id": s.teacher_id,
+        }
+        for s in subjects
+        if s.batch_id is not None and s.teacher_id is not None
     ]
     rooms_data = [
         {"id": r.id, "name": r.name, "capacity": r.capacity, "is_lab": r.is_lab}
@@ -328,9 +356,67 @@ async def generate_schedule(
         {"id": b.id, "name": b.name, "size": b.size} for b in batches
     ]
 
-    # Step D – offload CPU-heavy solve to a worker thread
+    if not subjects_data:
+        return {
+            "status": "INFEASIBLE",
+            "reason": (
+                "No subjects with batch/teacher assignments found. "
+                "Please check the seed data."
+            ),
+        }
+
+    # Step B – offload CPU-heavy solve to a worker thread
     result: dict = await asyncio.to_thread(
         _solve, teachers_data, subjects_data, rooms_data, batches_data
     )
+
+    # Step C – persist the run and schedule slots
+    run = TimetableRun(
+        department_id=department_id,
+        solver_status=result.get("status", "UNKNOWN"),
+        status=RunStatus.DRAFT if result.get("status") == "SUCCESS" else RunStatus.FAILED,
+        reason=result.get("reason"),
+    )
+    db.add(run)
+    await db.flush()  # get run.id
+
+    if result.get("status") == "SUCCESS":
+        schedule = result.get("schedule", [])
+        # Delete old slots for this department (keep only latest run)
+        old_run_ids_q = (
+            select(TimetableRun.id)
+            .where(TimetableRun.department_id == department_id)
+            .where(TimetableRun.id != run.id)
+        )
+        await db.execute(
+            delete(ScheduleSlot).where(
+                ScheduleSlot.run_id.in_(old_run_ids_q)
+            )
+        )
+        # Delete old runs
+        await db.execute(
+            delete(TimetableRun)
+            .where(TimetableRun.department_id == department_id)
+            .where(TimetableRun.id != run.id)
+        )
+
+        for entry in schedule:
+            slot = ScheduleSlot(
+                run_id=run.id,
+                batch_id=entry["batch_id"],
+                subject_id=entry["subject_id"],
+                teacher_id=entry["teacher_id"],
+                room_id=entry["room_id"],
+                day=DayOfWeek(entry["day"]),
+                slot_index=entry["slot_index"],
+            )
+            db.add(slot)
+
+        await db.commit()
+        result["run_id"] = run.id
+        result["slots_created"] = len(schedule)
+    else:
+        await db.commit()
+        result["run_id"] = run.id
 
     return result

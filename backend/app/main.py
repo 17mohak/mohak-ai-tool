@@ -1,11 +1,10 @@
 from contextlib import asynccontextmanager
-from app.api import auth, users, agents, telemetry, admin, ai, timetable
+from app.api import auth, users, agents, telemetry, admin, ai, timetable, scheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api import auth, users, agents, telemetry, admin, ai
 from app.middleware.audit import AuditLoggingMiddleware
 
 
@@ -50,6 +49,7 @@ app.include_router(agents.router, prefix="/api")
 app.include_router(telemetry.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
+app.include_router(scheduler.router, prefix="/api")
 
 
 @app.get("/health")

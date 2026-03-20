@@ -5,6 +5,41 @@ from google.ai.generativelanguage_v1beta.types import content
 from app.core.config import settings
 
 
+def _extract_safe_text(response) -> str:
+    """Defensively extract text from a Gemini response.
+
+    The SDK's ``response.text`` property *raises* when there is no valid
+    text Part (e.g. tool-call-only, blocked, or empty responses).  This
+    helper walks the raw candidates/parts structure instead so it never
+    throws.
+    """
+    try:
+        # Fast path – works when at least one text part exists
+        return response.text
+    except (ValueError, AttributeError):
+        pass
+
+    # Slow path – manually inspect candidates
+    try:
+        for candidate in (response.candidates or []):
+            for part in (candidate.content.parts or []):
+                if hasattr(part, "text") and part.text:
+                    return part.text
+    except (AttributeError, TypeError, IndexError):
+        pass
+
+    # Check for block / safety metadata and surface it
+    try:
+        if hasattr(response, "prompt_feedback"):
+            fb = response.prompt_feedback
+            if hasattr(fb, "block_reason") and fb.block_reason:
+                return f"[Response blocked by safety filter: {fb.block_reason}]"
+    except Exception:
+        pass
+
+    return ""
+
+
 class GeminiClient:
     """Client for interacting with Google's Gemini API."""
 
@@ -113,8 +148,8 @@ class GeminiClient:
             response = await chat.send_message_async(function_responses)
 
         result = {
-            "content": response.text if hasattr(response, "text") and response.text else "",
-            "function_calls": [], # Deprecated in favor of internal loop execution
+            "content": _extract_safe_text(response),
+            "function_calls": [],  # Deprecated in favor of internal loop execution
         }
 
         return result

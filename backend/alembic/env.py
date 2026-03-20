@@ -5,7 +5,12 @@ from alembic import context
 
 from app.core.config import settings
 from app.core.database import Base
-from app.models import User, Agent, AgentTask, AuditLog
+# Import ALL models so Alembic autogenerate sees every table
+from app.models import (  # noqa: F401
+    User, Agent, AgentTask, AuditLog, Policy,
+    Department, Teacher, Subject, Room, Batch,
+    ScheduleSlot, TimetableRun,
+)
 
 config = context.config
 if config.config_file_name is not None:

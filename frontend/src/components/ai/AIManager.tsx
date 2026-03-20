@@ -101,8 +101,8 @@ export default function AIManager({ isOpen, onClose }: AIManagerProps) {
                 Hello! I'm your AI Manager
               </h3>
               <p className="text-slate-600 max-w-md mx-auto">
-                I can help you with system stats, user management, audit logs, policies, and more.
-                Just ask me anything!
+                I can generate timetables, manage users, analyze audit logs, and more.
+                Try: &quot;Generate a timetable for uGDX&quot;
               </p>
             </div>
           )}
@@ -177,7 +177,7 @@ export default function AIManager({ isOpen, onClose }: AIManagerProps) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask me anything..."
+              placeholder="Try: Generate a timetable for uGDX..."
               className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
               disabled={loading}
             />

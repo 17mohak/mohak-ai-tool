@@ -5,11 +5,15 @@ from app.models.policy import Policy
 from app.models.timetable import (
     Department,
     Teacher,
+    TeacherUnavailability,
     Subject,
     Room,
     Batch,
+    PinnedSlot,
     ScheduleSlot,
+    TimetableRun,
     DayOfWeek,
+    RunStatus,
 )
 
 __all__ = [
@@ -20,9 +24,13 @@ __all__ = [
     "Policy",
     "Department",
     "Teacher",
+    "TeacherUnavailability",
     "Subject",
     "Room",
     "Batch",
+    "PinnedSlot",
     "ScheduleSlot",
+    "TimetableRun",
     "DayOfWeek",
+    "RunStatus",
 ]
