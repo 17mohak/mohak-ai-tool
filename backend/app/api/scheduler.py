@@ -260,16 +260,25 @@ async def delete_teacher(teacher_id: int, db: AsyncSession = Depends(get_db)):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.get("/unavailability")
-async def list_unavailability(teacher_id: int | None = None, db: AsyncSession = Depends(get_db)):
-    q = select(TeacherUnavailability)
+async def list_unavailability(
+    teacher_id: int | None = None,
+    department_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    q = select(TeacherUnavailability).options(joinedload(TeacherUnavailability.teacher))
     if teacher_id is not None:
         q = q.where(TeacherUnavailability.teacher_id == teacher_id)
+    if department_id is not None:
+        q = q.join(Teacher, TeacherUnavailability.teacher_id == Teacher.id).where(
+            Teacher.department_id == department_id
+        )
     result = await db.execute(q)
     rows = result.scalars().all()
     return [
         {
             "id": r.id,
             "teacher_id": r.teacher_id,
+            "teacher_name": r.teacher.name if r.teacher else "",
             "day": r.day.value,
             "slot_index": r.slot_index,
         }
@@ -710,12 +719,22 @@ async def get_department_state(dept_name: str, db: AsyncSession = Depends(get_db
     )
     runs = rr.scalars().all()
 
+    # Teacher unavailabilities for the department
+    teacher_ids = [t.id for t in teachers]
+    ur = await db.execute(
+        select(TeacherUnavailability)
+        .options(joinedload(TeacherUnavailability.teacher))
+        .where(TeacherUnavailability.teacher_id.in_(teacher_ids) if teacher_ids else TeacherUnavailability.id < 0)
+    )
+    unavailabilities = ur.scalars().all()
+
     return {
         "department": {"id": dept.id, "name": dept.name},
         "batches": [{"id": b.id, "name": b.name, "size": b.size, "parent_batch_id": b.parent_batch_id, "is_lab": b.parent_batch_id is not None, "max_classes_per_day": b.max_classes_per_day} for b in batches],
         "teachers": [{"id": t.id, "name": t.name, "email": t.email, "preferred_start_slot": t.preferred_start_slot, "preferred_end_slot": t.preferred_end_slot, "max_classes_per_day": t.max_classes_per_day} for t in teachers],
         "subjects": [{"id": s.id, "name": s.name, "code": s.code, "credits": s.credits, "batch_id": s.batch_id, "batch_name": batch_map.get(s.batch_id, ""), "teacher_id": s.teacher_id, "teacher_name": teacher_map.get(s.teacher_id, "")} for s in subjects],
         "pinned_slots": [{"id": p.id, "subject_id": p.subject_id, "subject_name": p.subject.name if p.subject else "", "day": p.day.value, "slot_index": p.slot_index} for p in pins],
+        "unavailabilities": [{"id": u.id, "teacher_id": u.teacher_id, "teacher_name": u.teacher.name if u.teacher else "", "day": u.day.value, "slot_index": u.slot_index} for u in unavailabilities],
         "runs": [{"id": r.id, "status": r.status.value, "solver_status": r.solver_status, "reason": r.reason, "created_at": r.created_at.isoformat() if r.created_at else None} for r in runs],
     }
 
@@ -726,12 +745,35 @@ async def get_department_state(dept_name: str, db: AsyncSession = Depends(get_db
 
 @router.post("/generate-variants/{dept_name}")
 async def generate_variants(dept_name: str, db: AsyncSession = Depends(get_db)):
-    """Generate 3 timetable variants for a department (by name)."""
+    """Generate 3 timetable variants for a department (by name).
+
+    Run lifecycle:
+    1. Delete old DRAFT runs for this department once upfront.
+    2. Call generate_schedule 3 times (solver no longer deletes old runs).
+    3. Each successful run is persisted independently.
+    """
     dept = await _resolve_dept(db, dept_name)
 
     from app.modules.timetable_ai.solver import generate_schedule
     from app.api.telemetry import broadcast
 
+    # Step 1: Delete old DRAFT runs for this department
+    old_draft_ids_q = (
+        select(TimetableRun.id)
+        .where(TimetableRun.department_id == dept.id)
+        .where(TimetableRun.status == RunStatus.DRAFT)
+    )
+    await db.execute(
+        delete(ScheduleSlot).where(ScheduleSlot.run_id.in_(old_draft_ids_q))
+    )
+    await db.execute(
+        delete(TimetableRun)
+        .where(TimetableRun.department_id == dept.id)
+        .where(TimetableRun.status == RunStatus.DRAFT)
+    )
+    await db.commit()
+
+    # Step 2: Generate 3 variants
     results = []
     for i in range(3):
         label = f"V{i+1}"

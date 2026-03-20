@@ -55,7 +55,7 @@ export default function AdminAuditPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-slate-600">Loading audit logs...</p>
+        <p className="text-slate-400">Loading audit logs...</p>
       </div>
     );
   }
@@ -64,20 +64,20 @@ export default function AdminAuditPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Audit Logs</h1>
-          <p className="text-slate-600 mt-1">System activity and security events</p>
+          <h1 className="text-2xl font-bold text-slate-100">Audit Logs</h1>
+          <p className="text-slate-400 mt-1">System activity and security events</p>
         </div>
-        <button onClick={handleExport} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+        <button onClick={handleExport} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
           Export Logs
         </button>
       </div>
 
       <div className="flex gap-4 items-center">
-        <label className="text-sm font-medium text-slate-700">Show:</label>
+        <label className="text-sm font-medium text-slate-400">Show:</label>
         <select
           value={limit}
           onChange={(e) => setLimit(Number(e.target.value))}
-          className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="px-3 py-2 border border-slate-600 rounded-lg bg-slate-700 text-slate-200 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
         >
           <option value={25}>25 logs</option>
           <option value={50}>50 logs</option>
@@ -86,28 +86,28 @@ export default function AdminAuditPage() {
         </select>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="bg-slate-700/50 border-b border-slate-700">
               <tr>
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-600 uppercase">Timestamp</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-600 uppercase">Action</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-600 uppercase">User ID</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-600 uppercase">IP Address</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-600 uppercase">Details</th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase">Timestamp</th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase">Action</th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase">User ID</th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase">IP Address</th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase">Details</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-slate-700/50">
               {logs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-50">
-                  <td className="px-6 py-4 text-sm text-slate-900 whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
+                <tr key={log.id} className="hover:bg-slate-700/30">
+                  <td className="px-6 py-4 text-sm text-slate-200 whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
                   <td className="px-6 py-4">
-                    <span className="inline-flex px-2 py-1 text-xs font-mono rounded bg-slate-100 text-slate-800">{log.action}</span>
+                    <span className="inline-flex px-2 py-1 text-xs font-mono rounded bg-slate-700 text-slate-300">{log.action}</span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{log.user_id || "-"}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600 font-mono">{log.ip_address || "-"}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600 max-w-md truncate" title={log.details}>{log.details}</td>
+                  <td className="px-6 py-4 text-sm text-slate-400">{log.user_id || "-"}</td>
+                  <td className="px-6 py-4 text-sm text-slate-400 font-mono">{log.ip_address || "-"}</td>
+                  <td className="px-6 py-4 text-sm text-slate-400 max-w-md truncate" title={log.details}>{log.details}</td>
                 </tr>
               ))}
             </tbody>
@@ -115,7 +115,7 @@ export default function AdminAuditPage() {
         </div>
         {logs.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-slate-600">No audit logs found</p>
+            <p className="text-slate-400">No audit logs found</p>
           </div>
         )}
       </div>

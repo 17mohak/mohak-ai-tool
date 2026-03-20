@@ -34,9 +34,9 @@ function LogoImage({ collapsed }: { collapsed: boolean }) {
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: DashboardIcon },
-  { href: "/scheduler", label: "Scheduler Admin", icon: SchedulerIcon },
+  { href: "/scheduler", label: "Scheduler", icon: SchedulerIcon },
   { href: "/timetable", label: "Timetable", icon: TimetableIcon },
-  { href: "/admin/users", label: "User Management", icon: UsersIcon },
+  { href: "/admin/users", label: "Users", icon: UsersIcon },
   { href: "/admin/audit", label: "Audit Logs", icon: AuditIcon },
   { href: "/ai/policies", label: "AI Policies", icon: PolicyIcon },
   { href: "/ai/insights", label: "AI Insights", icon: InsightsIcon },
@@ -164,16 +164,6 @@ export default function Sidebar() {
           );
         })}
       </nav>
-
-      {!collapsed && (
-        <div className="p-4 border-t border-white/10">
-          <p className="text-xs text-white/60 uppercase tracking-wider mb-2">System Credits</p>
-          <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-            <div className="h-full bg-[var(--teal)] rounded-full w-3/4" />
-          </div>
-          <p className="text-xs text-white/70 mt-1">75% Usage Reached</p>
-        </div>
-      )}
     </aside>
   );
 }

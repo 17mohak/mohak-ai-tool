@@ -46,28 +46,28 @@ export default function AIInsightsPage() {
     }
   };
 
-  const getSeverityColor = (severity: string) => {
+  const getSeverityStyle = (severity: string) => {
     switch (severity) {
-      case "CRITICAL": return "bg-red-100 text-red-800 border-red-200";
-      case "WARNING": return "bg-yellow-100 text-yellow-800 border-yellow-200";
-      case "RECOMMENDATION": return "bg-blue-100 text-blue-800 border-blue-200";
-      default: return "bg-slate-100 text-slate-800 border-slate-200";
+      case "CRITICAL": return "border-red-500/30 bg-red-500/5";
+      case "WARNING": return "border-amber-500/30 bg-amber-500/5";
+      case "RECOMMENDATION": return "border-indigo-500/30 bg-indigo-500/5";
+      default: return "border-slate-700 bg-slate-800";
     }
   };
 
-  const getSeverityIcon = (severity: string) => {
+  const getSeverityBadge = (severity: string) => {
     switch (severity) {
-      case "CRITICAL": return "🚨";
-      case "WARNING": return "⚠️";
-      case "RECOMMENDATION": return "💡";
-      default: return "ℹ️";
+      case "CRITICAL": return "bg-red-500/20 text-red-400";
+      case "WARNING": return "bg-amber-500/20 text-amber-400";
+      case "RECOMMENDATION": return "bg-indigo-500/20 text-indigo-400";
+      default: return "bg-slate-700 text-slate-400";
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-slate-600">Loading insights...</p>
+        <p className="text-slate-400">Loading insights...</p>
       </div>
     );
   }
@@ -76,41 +76,43 @@ export default function AIInsightsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">AI Insights</h1>
-          <p className="text-slate-600 mt-1">Proactive analysis and recommendations</p>
+          <h1 className="text-2xl font-bold text-slate-100">AI Insights</h1>
+          <p className="text-slate-400 mt-1">Proactive analysis and recommendations</p>
         </div>
         <button onClick={handleGenerate} disabled={generating}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-          {generating ? "Generating..." : "🔄 Regenerate Insights"}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+          {generating ? "Generating..." : "Regenerate Insights"}
         </button>
       </div>
 
       <div className="grid gap-4">
         {insights.map((insight, index) => (
-          <div key={index} className={`bg-white rounded-xl border-2 p-6 ${getSeverityColor(insight.severity)}`}>
+          <div key={index} className={`rounded-xl border p-6 ${getSeverityStyle(insight.severity)}`}>
             <div className="flex items-start gap-4">
-              <span className="text-3xl">{getSeverityIcon(insight.severity)}</span>
               <div className="flex-1">
                 <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-lg font-semibold text-slate-900">{insight.title}</h3>
-                  <span className="px-2 py-1 text-xs font-medium rounded bg-white/50">{insight.category}</span>
+                  <h3 className="text-lg font-semibold text-slate-100">{insight.title}</h3>
+                  <div className="flex gap-2 ml-4">
+                    <span className={`px-2 py-1 text-xs font-medium rounded ${getSeverityBadge(insight.severity)}`}>{insight.severity}</span>
+                    <span className="px-2 py-1 text-xs font-medium rounded bg-slate-700 text-slate-400">{insight.category}</span>
+                  </div>
                 </div>
-                <p className="text-slate-700 mb-4">{insight.description}</p>
-                <div className="bg-white/70 rounded-lg p-4 mb-3">
-                  <p className="text-xs font-medium text-slate-600 uppercase mb-1">Suggested Action</p>
-                  <p className="text-slate-900">{insight.suggested_action}</p>
+                <p className="text-slate-300 mb-4">{insight.description}</p>
+                <div className="bg-slate-800/50 rounded-lg p-4 mb-3 border border-slate-700/50">
+                  <p className="text-xs font-medium text-slate-500 uppercase mb-1">Suggested Action</p>
+                  <p className="text-slate-200">{insight.suggested_action}</p>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-sm font-medium text-slate-600">Expected Impact:</span>
-                  <p className="text-sm text-slate-700">{insight.impact}</p>
+                  <span className="text-sm font-medium text-slate-500">Expected Impact:</span>
+                  <p className="text-sm text-slate-300">{insight.impact}</p>
                 </div>
               </div>
             </div>
           </div>
         ))}
         {insights.length === 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-            <p className="text-slate-600">No insights available. Click &quot;Regenerate Insights&quot; to analyze system data.</p>
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-12 text-center">
+            <p className="text-slate-400">No insights available. Click &quot;Regenerate Insights&quot; to analyze system data.</p>
           </div>
         )}
       </div>

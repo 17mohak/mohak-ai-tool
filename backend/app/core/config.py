@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     keycloak_client_secret: str = ""
 
     # Comma-separated origins for CORS (e.g. http://localhost:3000,https://app.example.com)
-    cors_origins: str = "http://localhost:3000,http://localhost:3000,http://127.0.0.1:3000,http://127.0.0.1:3000"
+    cors_origins: str = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
 
 
 settings = Settings()

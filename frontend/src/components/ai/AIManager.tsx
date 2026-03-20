@@ -8,7 +8,7 @@ import { fetchWithAuth } from "@/lib/api";
 interface Message {
   role: "user" | "assistant";
   content: string;
-  tool_calls?: Array<{ tool: string; result: any }>;
+  tool_calls?: Array<{ tool: string; result: unknown }>;
 }
 
 interface AIManagerProps {
@@ -73,21 +73,21 @@ export default function AIManager({ isOpen, onClose }: AIManagerProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl h-[600px] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl h-[600px] flex flex-col border border-slate-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <span className="text-2xl">🤖</span>
             <div>
-              <h2 className="text-lg font-bold text-slate-900">AI Manager</h2>
-              <p className="text-xs text-slate-600">Your intelligent assistant</p>
+              <h2 className="text-lg font-bold text-slate-100">AI Manager</h2>
+              <p className="text-xs text-slate-400">Your intelligent assistant</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-slate-700 transition-colors"
           >
-            <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -97,10 +97,10 @@ export default function AIManager({ isOpen, onClose }: AIManagerProps) {
           {messages.length === 0 && (
             <div className="text-center py-12">
               <span className="text-6xl mb-4 block">👋</span>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                Hello! I'm your AI Manager
+              <h3 className="text-lg font-semibold text-slate-200 mb-2">
+                Hello! I&apos;m your AI Manager
               </h3>
-              <p className="text-slate-600 max-w-md mx-auto">
+              <p className="text-slate-400 max-w-md mx-auto">
                 I can generate timetables, manage users, analyze audit logs, and more.
                 Try: &quot;Generate a timetable for uGDX&quot;
               </p>
@@ -115,18 +115,18 @@ export default function AIManager({ isOpen, onClose }: AIManagerProps) {
               }`}
             >
               {message.role === "assistant" && (
-                <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
                   🤖
                 </div>
               )}
               <div
                 className={`max-w-[80%] rounded-2xl px-4 py-3 ${
                   message.role === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-100 text-slate-900"
+                    ? "bg-indigo-600 text-white"
+                    : "bg-slate-700 text-slate-200"
                 }`}
               >
-                <ReactMarkdown className="prose prose-sm max-w-none">
+                <ReactMarkdown className="prose prose-sm prose-invert max-w-none">
                   {message.content}
                 </ReactMarkdown>
                 
@@ -135,10 +135,10 @@ export default function AIManager({ isOpen, onClose }: AIManagerProps) {
                     {message.tool_calls.map((call, i) => (
                       <div
                         key={i}
-                        className="text-xs bg-white/50 rounded p-2 border border-slate-200"
+                        className="text-xs bg-slate-600/50 rounded p-2 border border-slate-600"
                       >
                         <p className="font-medium">🔧 {call.tool}</p>
-                        <pre className="mt-1 text-xs overflow-x-auto">
+                        <pre className="mt-1 text-xs overflow-x-auto text-slate-300">
                           {JSON.stringify(call.result, null, 2)}
                         </pre>
                       </div>
@@ -147,7 +147,7 @@ export default function AIManager({ isOpen, onClose }: AIManagerProps) {
                 )}
               </div>
               {message.role === "user" && (
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
                   👤
                 </div>
               )}
@@ -156,21 +156,21 @@ export default function AIManager({ isOpen, onClose }: AIManagerProps) {
 
           {loading && (
             <div className="flex gap-3 justify-start">
-              <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
                 🤖
               </div>
-              <div className="bg-slate-100 rounded-2xl px-4 py-3">
+              <div className="bg-slate-700 rounded-2xl px-4 py-3">
                 <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        <div className="border-t border-slate-200 p-4">
+        <div className="border-t border-slate-700 p-4">
           <div className="flex gap-2">
             <input
               type="text"
@@ -178,13 +178,13 @@ export default function AIManager({ isOpen, onClose }: AIManagerProps) {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Try: Generate a timetable for uGDX..."
-              className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
+              className="flex-1 px-4 py-3 border border-slate-600 rounded-xl bg-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none"
               disabled={loading}
             />
             <button
               onClick={handleSend}
               disabled={loading || !input.trim()}
-              className="px-6 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Send
             </button>

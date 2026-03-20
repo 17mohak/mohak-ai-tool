@@ -382,23 +382,6 @@ async def generate_schedule(
 
     if result.get("status") == "SUCCESS":
         schedule = result.get("schedule", [])
-        # Delete old slots for this department (keep only latest run)
-        old_run_ids_q = (
-            select(TimetableRun.id)
-            .where(TimetableRun.department_id == department_id)
-            .where(TimetableRun.id != run.id)
-        )
-        await db.execute(
-            delete(ScheduleSlot).where(
-                ScheduleSlot.run_id.in_(old_run_ids_q)
-            )
-        )
-        # Delete old runs
-        await db.execute(
-            delete(TimetableRun)
-            .where(TimetableRun.department_id == department_id)
-            .where(TimetableRun.id != run.id)
-        )
 
         for entry in schedule:
             slot = ScheduleSlot(
