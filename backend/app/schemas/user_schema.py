@@ -13,7 +13,8 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
-    role: UserRole = UserRole.USER
+    role: UserRole = UserRole.STAFF
+    teacher_id: Optional[int] = None
 
 
 class TokenResponse(BaseModel):

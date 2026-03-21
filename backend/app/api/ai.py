@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from typing import List
 
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
+from app.models.user import User
 from app.models.policy import Policy
+from app.models.timetable import TimetableRun, RunStatus, Teacher, Batch
 from app.schemas.ai_schema import (
     PolicyCreate,
     PolicyUpdate,
@@ -63,7 +66,9 @@ async def get_policy(
     policy = result.scalar_one_or_none()
 
     if not policy:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found"
+        )
 
     return policy
 
@@ -79,7 +84,9 @@ async def update_policy(
     policy = result.scalar_one_or_none()
 
     if not policy:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found"
+        )
 
     for field, value in policy_data.model_dump(exclude_unset=True).items():
         setattr(policy, field, value)
@@ -99,7 +106,9 @@ async def delete_policy(
     policy = result.scalar_one_or_none()
 
     if not policy:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found"
+        )
 
     await db.delete(policy)
     await db.commit()
@@ -122,15 +131,32 @@ async def translate_policy(
 
 
 @router.get("/insights", response_model=List[InsightResponse])
-async def get_insights():
-    """Get AI-generated insights."""
+async def get_insights(
+    db: AsyncSession = Depends(get_db),
+):
+    """Get AI-generated insights from real system data."""
+    # Fetch real counts from database
+    result = await db.execute(select(func.count(User.id)))
+    user_count = result.scalar() or 0
+
+    result = await db.execute(
+        select(func.count(TimetableRun.id)).where(
+            TimetableRun.status == RunStatus.PUBLISHED
+        )
+    )
+    published_timetables = result.scalar() or 0
+
+    result = await db.execute(select(func.count(Teacher.id)))
+    teacher_count = result.scalar() or 0
+
+    result = await db.execute(select(func.count(Batch.id)))
+    batch_count = result.scalar() or 0
+
     system_data = {
-        "user_count": 127,
-        "active_users_today": 89,
-        "api_requests_today": 15432,
-        "avg_response_time_ms": 245,
-        "error_rate_percent": 0.8,
-        "database_size_gb": 12.4,
+        "user_count": user_count,
+        "published_timetables": published_timetables,
+        "teacher_count": teacher_count,
+        "batch_count": batch_count,
     }
 
     insights = await insights_service.generate_insights(system_data)
@@ -138,14 +164,24 @@ async def get_insights():
 
 
 @router.post("/insights/generate")
-async def generate_insights():
+async def generate_insights(
+    db: AsyncSession = Depends(get_db),
+):
     """Trigger manual insights generation."""
+    # Fetch real counts from database
+    result = await db.execute(select(func.count(User.id)))
+    user_count = result.scalar() or 0
+
+    result = await db.execute(
+        select(func.count(TimetableRun.id)).where(
+            TimetableRun.status == RunStatus.PUBLISHED
+        )
+    )
+    published_timetables = result.scalar() or 0
+
     system_data = {
-        "user_count": 127,
-        "active_users_today": 89,
-        "api_requests_today": 15432,
-        "avg_response_time_ms": 245,
-        "error_rate_percent": 0.8,
+        "user_count": user_count,
+        "published_timetables": published_timetables,
     }
 
     insights = await insights_service.generate_insights(system_data)
@@ -155,14 +191,15 @@ async def generate_insights():
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
+    current_user: User = Depends(get_current_user),
 ):
     """Chat with AI Manager."""
     messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
 
     response = await chat_service.chat(
         messages=messages,
-        user_email="user@atlas.local",
-        user_role="ADMIN",
+        user_email=current_user.email,
+        user_role=current_user.role.value,
         current_page=request.current_page,
     )
 

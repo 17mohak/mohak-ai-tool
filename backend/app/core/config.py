@@ -14,10 +14,15 @@ class Settings(BaseSettings):
     app_name: str = "Atlas Smart Class Scheduler"
     app_env: str = "development"
     log_level: str = "INFO"
-    debug: bool = False
+    DEBUG: bool = True
+
+    @property
+    def debug(self) -> bool:
+        """Backward compatibility property."""
+        return self.DEBUG
 
     database_url: str = "postgresql+asyncpg://atlas:atlas_secret@db:5432/atlas_db"
-    
+
     @model_validator(mode="after")
     def override_db_url_in_docker(self) -> "Settings":
         # If we are running inside a Docker container, we MUST connect to the 'db' service,
@@ -30,15 +35,15 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
-    
+
     storage_backend: str = "local"
     gcs_bucket_name: str = ""
-    
+
     gemini_api_key: str | None = None
     ai_model: str = "gemini-2.5-flash-lite"
-    
+
     approved_email_domains: str = "atlasuniversity.edu.in"
-    
+
     keycloak_server_url: str = ""
     keycloak_realm: str = "atlas"
     keycloak_client_id: str = "atlas-backend"

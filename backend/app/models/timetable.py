@@ -71,7 +71,9 @@ class Teacher(Base):
     department_id: Mapped[int] = mapped_column(
         ForeignKey("departments.id"), nullable=False, index=True
     )
-    preferred_start_slot: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    preferred_start_slot: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     preferred_end_slot: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     max_classes_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
 
@@ -97,6 +99,28 @@ class TeacherUnavailability(Base):
     slot_index: Mapped[int] = mapped_column(Integer, nullable=False)
 
     teacher: Mapped["Teacher"] = relationship(back_populates="unavailabilities")
+
+
+class LeaveApplication(Base):
+    """Teacher leave applications for specific date ranges."""
+
+    __tablename__ = "leave_applications"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    start_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    teacher: Mapped["Teacher"] = relationship(foreign_keys=[teacher_id])
 
 
 class Subject(Base):
@@ -150,6 +174,9 @@ class Batch(Base):
     parent_batch: Mapped["Batch | None"] = relationship(
         remote_side="Batch.id", foreign_keys=[parent_batch_id]
     )
+    children: Mapped[list["Batch"]] = relationship(
+        back_populates="parent_batch", foreign_keys="Batch.parent_batch_id"
+    )
 
 
 class PinnedSlot(Base):
@@ -179,10 +206,13 @@ class TimetableRun(Base):
     department_id: Mapped[int] = mapped_column(
         ForeignKey("departments.id"), nullable=False, index=True
     )
+    variant_number: Mapped[int] = mapped_column(Integer, nullable=True, index=True)
     status: Mapped[RunStatus] = mapped_column(
         Enum(RunStatus), default=RunStatus.DRAFT, nullable=False
     )
-    solver_status: Mapped[str] = mapped_column(String(64), nullable=False, default="PENDING")
+    solver_status: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="PENDING"
+    )
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

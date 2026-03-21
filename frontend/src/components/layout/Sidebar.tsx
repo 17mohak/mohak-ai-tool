@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useAuth } from "@/lib/auth";
 
 function LogoFallback({ size }: { size: number }) {
   return (
@@ -32,15 +33,17 @@ function LogoImage({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-const navItems = [
-  { href: "/", label: "Dashboard", icon: DashboardIcon },
-  { href: "/scheduler", label: "Scheduler", icon: SchedulerIcon },
-  { href: "/timetable", label: "Timetable", icon: TimetableIcon },
-  { href: "/admin/users", label: "Users", icon: UsersIcon },
-  { href: "/admin/audit", label: "Audit Logs", icon: AuditIcon },
-  { href: "/ai/policies", label: "AI Policies", icon: PolicyIcon },
-  { href: "/ai/insights", label: "AI Insights", icon: InsightsIcon },
-  { href: "/settings", label: "Settings", icon: SettingsIcon },
+const allNavItems = [
+  { href: "/", label: "Dashboard", icon: DashboardIcon, roles: ["ADMIN", "STAFF"] },
+  { href: "/scheduler", label: "Scheduler", icon: SchedulerIcon, roles: ["ADMIN"] },
+  { href: "/timetable", label: "Timetable", icon: TimetableIcon, roles: ["ADMIN"] },
+  { href: "/my-timetable", label: "My Timetable", icon: TimetableIcon, roles: ["STAFF"] },
+  { href: "/admin/users", label: "Users", icon: UsersIcon, roles: ["ADMIN"] },
+  { href: "/admin/audit", label: "Audit Logs", icon: AuditIcon, roles: ["ADMIN"] },
+  { href: "/admin/leaves", label: "Leave Requests", icon: LeaveIcon, roles: ["ADMIN"] },
+  { href: "/ai/policies", label: "AI Policies", icon: PolicyIcon, roles: ["ADMIN"] },
+  { href: "/ai/insights", label: "AI Insights", icon: InsightsIcon, roles: ["ADMIN"] },
+  { href: "/settings", label: "Settings", icon: SettingsIcon, roles: ["ADMIN", "STAFF"] },
 ];
 
 function DashboardIcon({ className }: { className?: string }) {
@@ -80,6 +83,14 @@ function AuditIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  );
+}
+
+function LeaveIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
     </svg>
   );
 }
@@ -125,6 +136,13 @@ function ChevronIcon({ collapsed }: { collapsed: boolean }) {
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { user, isAdmin, isStaff } = useAuth();
+
+  // Filter nav items based on user role
+  const navItems = allNavItems.filter((item) => {
+    if (!user) return false;
+    return item.roles.includes(user.role);
+  });
 
   return (
     <aside
