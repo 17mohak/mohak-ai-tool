@@ -169,15 +169,26 @@ export default function SchedulerPage() {
 
     const loadDepartments = async () => {
       try {
-        console.log("[Scheduler] Fetching departments...");
-        const d = await api<DeptListItem[]>("/api/scheduler/departments");
-        console.log("[Scheduler] Departments loaded:", d.length);
+        const response = await api<DeptListItem[] | { data: DeptListItem[] }>("/api/scheduler/departments");
+        
+        // Normalize: handle both direct array and { data: array } formats (CASE B/C fix)
+        const d = Array.isArray(response) 
+          ? response 
+          : (response as { data: DeptListItem[] })?.data || [];
+        
+        if (!Array.isArray(d)) {
+          setError(`Invalid response format: expected array, got ${typeof d}`);
+          setLoading(false);
+          return;
+        }
+        
         setDeptList(d);
+        
         if (d.length > 0) {
           setSelectedDeptName(d[0].name);
         }
       } catch (err) {
-        console.error("[Scheduler] API ERROR - Failed to load departments:", err);
+        console.error("[Scheduler] Failed to load departments:", err);
         setError(err instanceof Error ? err.message : "Failed to load departments");
       } finally {
         setLoading(false);
@@ -196,16 +207,14 @@ export default function SchedulerPage() {
     const loadState = async () => {
       setLoading(true); setError(null); setGenDiag(null);
       try {
-        console.log("[Scheduler] Fetching state for department:", selectedDeptName);
         const s = await api<DeptState>(`/api/scheduler/state/${encodeURIComponent(selectedDeptName)}`);
-        console.log("[Scheduler] State loaded - batches:", s.batches.length, "teachers:", s.teachers.length, "subjects:", s.subjects.length);
         setState(s);
         // Auto-select first run
         const successRuns = s.runs.filter(r => r.solver_status === "SUCCESS");
         if (successRuns.length > 0) setSelectedRunId(successRuns[0].id);
         else setSelectedRunId(null);
       } catch (err) {
-        console.error("[Scheduler] API ERROR - Failed to load state:", err);
+        console.error("[Scheduler] Failed to load state:", err);
         setError(err instanceof Error ? err.message : "Failed to load state");
         setState(null);
       } finally {
@@ -223,15 +232,13 @@ export default function SchedulerPage() {
     setError(null);
     setGenDiag(null);
     try {
-      console.log("[Scheduler] Refreshing state for department:", selectedDeptName);
       const s = await api<DeptState>(`/api/scheduler/state/${encodeURIComponent(selectedDeptName)}`);
-      console.log("[Scheduler] State refreshed successfully");
       setState(s);
       const successRuns = s.runs.filter(r => r.solver_status === "SUCCESS");
       if (successRuns.length > 0) setSelectedRunId(successRuns[0].id);
       else setSelectedRunId(null);
     } catch (err) {
-      console.error("[Scheduler] API ERROR - Failed to refresh state:", err);
+      console.error("[Scheduler] Failed to refresh state:", err);
       setError(err instanceof Error ? err.message : "Failed to load state");
       setState(null);
     } finally {
@@ -275,9 +282,7 @@ export default function SchedulerPage() {
     if (!selectedDeptName) return;
     setGenerating(true); setGenDiag(null);
     try {
-      console.log("[Scheduler] Generating variants for:", selectedDeptName);
       const res = await api<{ variants: VariantResult[] }>(`/api/scheduler/generate-variants/${encodeURIComponent(selectedDeptName)}`, { method: "POST" });
-      console.log("[Scheduler] Generation result:", res);
       const successes = res.variants.filter(v => v.status === "SUCCESS");
       const failures = res.variants.filter(v => v.status !== "SUCCESS");
       if (failures.length > 0) {
@@ -285,7 +290,7 @@ export default function SchedulerPage() {
       }
       await refreshState(); // refresh
     } catch (err) {
-      console.error("[Scheduler] API ERROR - Generation failed:", err);
+      console.error("[Scheduler] Generation failed:", err);
       setGenDiag(err instanceof Error ? err.message : "Generation failed");
     } finally {
       setGenerating(false);
@@ -296,12 +301,10 @@ export default function SchedulerPage() {
   const handlePublish = async () => {
     if (!selectedRunId) return;
     try {
-      console.log("[Scheduler] Publishing run:", selectedRunId);
       await api(`/api/scheduler/runs/${selectedRunId}/publish`, { method: "POST" });
-      console.log("[Scheduler] Published successfully");
       await refreshState();
     } catch (err) {
-      console.error("[Scheduler] API ERROR - Publish failed:", err);
+      console.error("[Scheduler] Publish failed:", err);
       setGenDiag(err instanceof Error ? err.message : "Publish failed");
     }
   };
@@ -310,23 +313,19 @@ export default function SchedulerPage() {
   const handleAddPin = async () => {
     if (!newPinSubject) return;
     try {
-      console.log("[Scheduler] Adding pinned slot for subject:", newPinSubject);
       await fetchWithAuth("/api/scheduler/pinned-slots", { method: "POST", body: JSON.stringify({ subject_id: newPinSubject, day: newPinDay, slot_index: newPinSlot }) });
-      console.log("[Scheduler] Pinned slot added successfully");
       await refreshState();
     } catch (err) {
-      console.error("[Scheduler] API ERROR - Failed to add pinned slot:", err);
+      console.error("[Scheduler] Failed to add pinned slot:", err);
       setError("Failed to add pinned slot");
     }
   };
   const handleDeletePin = async (id: number) => {
     try {
-      console.log("[Scheduler] Deleting pinned slot:", id);
       await fetchWithAuth(`/api/scheduler/pinned-slots/${id}`, { method: "DELETE" });
-      console.log("[Scheduler] Pinned slot deleted successfully");
       await refreshState();
     } catch (err) {
-      console.error("[Scheduler] API ERROR - Failed to delete pinned slot:", err);
+      console.error("[Scheduler] Failed to delete pinned slot:", err);
       setError("Failed to delete pinned slot");
     }
   };
@@ -335,23 +334,19 @@ export default function SchedulerPage() {
   const handleAddUnav = async () => {
     if (!newUnavTeacher) return;
     try {
-      console.log("[Scheduler] Adding unavailability for teacher:", newUnavTeacher);
       await fetchWithAuth("/api/scheduler/unavailability", { method: "POST", body: JSON.stringify({ teacher_id: newUnavTeacher, day: newUnavDay, slot_index: newUnavSlot }) });
-      console.log("[Scheduler] Unavailability added successfully");
       await refreshState();
     } catch (err) {
-      console.error("[Scheduler] API ERROR - Failed to add unavailability:", err);
+      console.error("[Scheduler] Failed to add unavailability:", err);
       setError("Failed to add unavailability");
     }
   };
   const handleDeleteUnav = async (id: number) => {
     try {
-      console.log("[Scheduler] Deleting unavailability:", id);
       await fetchWithAuth(`/api/scheduler/unavailability/${id}`, { method: "DELETE" });
-      console.log("[Scheduler] Unavailability deleted successfully");
       await refreshState();
     } catch (err) {
-      console.error("[Scheduler] API ERROR - Failed to delete unavailability:", err);
+      console.error("[Scheduler] Failed to delete unavailability:", err);
       setError("Failed to delete unavailability");
     }
   };
@@ -441,17 +436,8 @@ export default function SchedulerPage() {
       return;
     }
     
-    // Log the move attempt (backend API for slot movement not available yet)
-    console.log("[Scheduler] Attempting to move slot:", {
-      slotId: dragState.slot.id,
-      subject: dragState.slot.subject,
-      from: { day: dragState.sourceDay, slotIndex: dragState.sourceSlotIndex },
-      to: { day: targetDay, slotIndex: targetSlotIndex }
-    });
-    
-    // Note: Backend API for moving slots is not implemented yet
-    // This is a UI-only implementation for now
-    setGenDiag("Slot movement requires backend API - logged to console");
+    // Note: Backend API for moving slots - requires backend endpoint
+    setGenDiag("Slot movement not yet implemented");
     setDragState({ slot: null, sourceDay: null, sourceSlotIndex: null });
   };
 
@@ -529,6 +515,12 @@ export default function SchedulerPage() {
         <div className="text-slate-400 text-center">
           <p className="font-semibold">No departments found</p>
           <p className="text-sm mt-1">Create a department to get started</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-4 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded transition-colors"
+          >
+            Reload Page
+          </button>
         </div>
       </div>
     );
@@ -546,7 +538,11 @@ export default function SchedulerPage() {
             onChange={e => setSelectedDeptName(e.target.value)}
             className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/30"
           >
-            {deptList.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+            {deptList.length === 0 ? (
+              <option value="">No departments available</option>
+            ) : (
+              deptList.map(d => <option key={d.name} value={d.name}>{d.name}</option>)
+            )}
           </select>
         </div>
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi import status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -13,6 +14,7 @@ from app.core.config import settings
 from app.models.user import User, UserStatus, UserRole
 from app.models.timetable import Teacher
 from app.schemas.user_schema import LoginRequest, RegisterRequest, TokenResponse
+from app.core.dependencies import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -179,7 +181,18 @@ async def register(
     return TokenResponse(access_token=access_token)
 
 
-from app.core.dependencies import get_current_user
+@router.get("/debug-token")
+async def debug_token(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+):
+    """Debug endpoint to verify token is being received correctly."""
+    return {
+        "token_received": True,
+        "token_preview": credentials.credentials[:30] + "..."
+        if len(credentials.credentials) > 30
+        else credentials.credentials,
+        "token_length": len(credentials.credentials),
+    }
 
 
 @router.get("/me-debug")
@@ -217,81 +230,4 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         "created_at": current_user.created_at.isoformat()
         if current_user.created_at
         else None,
-    }
-
-    token = auth_header.split(" ")[1]
-    return {"token_received": True, "token_preview": token[:20] + "..."}
-
-
-@router.get("/me")
-async def get_current_user_info(request: Request, db: AsyncSession = Depends(get_db)):
-    """Get current user information - extracts token from request headers."""
-    print("[ME] Processing /me request")
-
-    # Extract Authorization header
-    auth_header = request.headers.get("authorization")
-    if not auth_header:
-        print("[ME] ERROR: No authorization header")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated - no authorization header",
-        )
-
-    if not auth_header.startswith("Bearer "):
-        print(f"[ME] ERROR: Invalid auth format: {auth_header[:20]}...")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization format - must be Bearer token",
-        )
-
-    token = auth_header.split(" ")[1]
-    print(f"[ME] Token extracted: {token[:20]}...")
-
-    # Decode token
-    try:
-        payload = decode_access_token(token)
-        if payload is None:
-            print("[ME] ERROR: Token decode returned None")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token",
-            )
-    except Exception as e:
-        print(f"[ME] ERROR: Token decode failed: {type(e).__name__}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
-
-    user_id = payload.get("sub")
-    if not user_id:
-        print("[ME] ERROR: No user_id in token payload")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
-        )
-
-    print(f"[ME] Looking up user: {user_id}")
-
-    # Fetch user from DB
-    result = await db.execute(select(User).where(User.id == int(user_id)))
-    user = result.scalar_one_or_none()
-
-    if not user:
-        print(f"[ME] ERROR: User not found: {user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-
-    print(f"[ME] SUCCESS: User found: {user.email}")
-
-    return {
-        "id": user.id,
-        "email": user.email,
-        "role": user.role.value,
-        "status": user.status.value,
-        "is_active": user.is_active,
-        "teacher_id": user.teacher_id,
-        "created_at": user.created_at.isoformat() if user.created_at else None,
     }

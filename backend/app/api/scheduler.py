@@ -125,6 +125,7 @@ async def list_departments(
                 "subject_count": sc.scalar() or 0,
             }
         )
+    print(f"[API DEBUG] Returning {len(out)} departments: {[d['name'] for d in out]}")
     return out
 
 

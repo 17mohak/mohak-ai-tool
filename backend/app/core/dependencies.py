@@ -15,33 +15,57 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    print(f"[AUTH] get_current_user called")
+
     if credentials is None:
+        print("[AUTH] ERROR: No credentials provided (credentials is None)")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
+            detail="Not authenticated - no credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    payload = decode_access_token(credentials.credentials)
+
+    token = credentials.credentials
+    print(
+        f"[AUTH] Token received: {token[:30]}..."
+        if len(token) > 30
+        else f"[AUTH] Token received: {token}"
+    )
+
+    payload = decode_access_token(token)
     if payload is None:
+        print("[AUTH] ERROR: decode_access_token returned None")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    print(f"[AUTH] Token decoded successfully: {payload}")
+
     sub = payload.get("sub")
     if sub is None:
+        print("[AUTH] ERROR: No 'sub' in payload")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
+            detail="Invalid token payload - no sub",
         )
+
+    print(f"[AUTH] Looking up user_id: {sub}")
+
     result = await db.execute(select(User).where(User.id == int(sub)))
     user = result.scalar_one_or_none()
     if user is None:
+        print(f"[AUTH] ERROR: User not found for id {sub}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+
+    print(f"[AUTH] SUCCESS: User found - {user.email}")
+
     if not user.is_active:
+        print(f"[AUTH] ERROR: User {user.email} is inactive")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User is inactive",
@@ -64,6 +88,7 @@ async def get_optional_user(
 
 def require_role(*allowed_roles: str):
     """DEPRECATED: Use authz engine instead."""
+
     async def role_checker(
         current_user: User = Depends(get_current_user),
     ) -> User:
