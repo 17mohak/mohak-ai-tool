@@ -54,17 +54,32 @@ DAYS: list[DayOfWeek] = [
     DayOfWeek.FRIDAY,
 ]
 
+# Extended slot structure - 8 slots per day (6 teaching + 2 breaks)
+# Matches frontend TIME_SLOTS structure
 SLOTS: list[dict[str, Any]] = [
-    {"index": 0, "label": "09:00 – 10:30"},
-    {"index": 1, "label": "11:00 – 12:30"},
-    {"index": 2, "label": "14:00 – 15:30"},
-    {"index": 3, "label": "16:00 – 17:30"},
+    {"index": 0, "label": "07:30 - 08:30", "is_break": False},
+    {"index": 1, "label": "08:30 - 09:30", "is_break": False},
+    {"index": 2, "label": "09:30 - 10:00", "is_break": True},   # Break
+    {"index": 3, "label": "10:00 - 11:00", "is_break": False},
+    {"index": 4, "label": "11:00 - 12:00", "is_break": False},
+    {"index": 5, "label": "12:00 - 12:15", "is_break": True},   # Break
+    {"index": 6, "label": "12:15 - 13:15", "is_break": False},
+    {"index": 7, "label": "13:15 - 14:15", "is_break": False},
 ]
-SLOT_INDICES: list[int] = [s["index"] for s in SLOTS]
+
+# Available slots for teaching (excluding breaks)
+AVAILABLE_SLOT_INDICES: list[int] = [s["index"] for s in SLOTS if not s["is_break"]]
+
+# Wednesday elective slots (10:00 - 12:00) are LOCKED for electives
+WEDNESDAY_ELECTIVE_SLOTS = [3, 4]
 
 NUM_DAYS = len(DAYS)
-NUM_SLOTS = len(SLOT_INDICES)
-TOTAL_WEEKLY_PERIODS = NUM_DAYS * NUM_SLOTS  # 20
+NUM_SLOTS = len(AVAILABLE_SLOT_INDICES)  # 6 teaching slots per day
+
+# Total weekly periods: 4 regular days × 6 slots + 1 Wednesday × 4 slots = 44
+REGULAR_DAY_SLOTS = 6
+WEDNESDAY_SLOTS = 4  # 6 - 2 (elective lock)
+TOTAL_WEEKLY_PERIODS = (4 * REGULAR_DAY_SLOTS) + WEDNESDAY_SLOTS  # 28
 
 
 # ──────────────────────────────────────────────
@@ -315,7 +330,7 @@ def _solve(
             if r["capacity"] < b["size"]:
                 continue
             for d_idx in range(NUM_DAYS):
-                for p in SLOT_INDICES:
+                for p in AVAILABLE_SLOT_INDICES:
                     key = (b_id, s["id"], t_id, r["id"], d_idx, p)
                     var_name = f"x_b{b_id}_s{s['id']}_t{t_id}_r{r['id']}_d{d_idx}_p{p}"
                     x[key] = model.NewBoolVar(var_name)
@@ -359,7 +374,7 @@ def _solve(
     # ── HARD CONSTRAINT 2: Teacher Conflict ──
     for t in teachers:
         for d_idx in range(NUM_DAYS):
-            for p in SLOT_INDICES:
+            for p in AVAILABLE_SLOT_INDICES:
                 vars_for_teacher = [
                     x[key]
                     for key in x
@@ -371,7 +386,7 @@ def _solve(
     # ── HARD CONSTRAINT 3: Room Conflict ──
     for r in rooms:
         for d_idx in range(NUM_DAYS):
-            for p in SLOT_INDICES:
+            for p in AVAILABLE_SLOT_INDICES:
                 vars_for_room = [
                     x[key]
                     for key in x
@@ -383,7 +398,7 @@ def _solve(
     # ── HARD CONSTRAINT 4: Batch Conflict ──
     for b in batches:
         for d_idx in range(NUM_DAYS):
-            for p in SLOT_INDICES:
+            for p in AVAILABLE_SLOT_INDICES:
                 vars_for_batch = [
                     x[key]
                     for key in x
@@ -457,7 +472,7 @@ def _solve(
     # ── HARD CONSTRAINT 9: Parent-Child Exclusion ──
     for parent_id, sub_ids in parent_to_subbatches.items():
         for d_idx in range(NUM_DAYS):
-            for p in SLOT_INDICES:
+            for p in AVAILABLE_SLOT_INDICES:
                 parent_vars = [
                     x[key]
                     for key in x
@@ -482,7 +497,7 @@ def _solve(
             )
 
         for d_idx in range(NUM_DAYS):
-            for p in SLOT_INDICES:
+            for p in AVAILABLE_SLOT_INDICES:
                 # Create indicator if this slot is used by any sub-batch
                 slot_used = model.NewBoolVar(f"lab_sync_{parent_id}_d{d_idx}_p{p}")
 
@@ -708,6 +723,7 @@ async def generate_schedule(
         random_seed=random_seed,
         variant_id=variant_id,
     )
+    print(f"   Solver result: status={result.get('status')}, schedule_length={len(result.get('schedule', []))}")
 
     run = TimetableRun(
         department_id=department_id,
@@ -719,9 +735,12 @@ async def generate_schedule(
     )
     db.add(run)
     await db.flush()
+    print(f"   Created run with ID: {run.id}")
 
     if result.get("status") == "SUCCESS":
-        for entry in result.get("schedule", []):
+        schedule = result.get("schedule", [])
+        print(f"   Saving {len(schedule)} slots to database...")
+        for idx, entry in enumerate(schedule):
             slot = ScheduleSlot(
                 run_id=run.id,
                 batch_id=entry["batch_id"],
@@ -732,12 +751,16 @@ async def generate_schedule(
                 slot_index=entry["slot_index"],
             )
             db.add(slot)
+            if idx < 3:  # Log first 3 slots
+                print(f"      Slot {idx}: batch={entry['batch_id']}, subject={entry['subject_id']}, day={entry['day']}, slot={entry['slot_index']}")
         await db.commit()
+        print(f"   ✅ Committed {len(schedule)} slots to database")
         result["run_id"] = run.id
-        result["slots_created"] = len(result["schedule"])
+        result["slots_created"] = len(schedule)
     else:
         await db.commit()
         result["run_id"] = run.id
+        print(f"   ⚠️ Run failed, no slots saved")
 
     return result
 

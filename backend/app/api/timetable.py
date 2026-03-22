@@ -156,6 +156,233 @@ async def publish_schedule(
     return {"message": f"Timetable for {dept.name} published successfully.", "run_id": run.id}
 
 
+from pydantic import BaseModel
+
+class MoveSlotRequest(BaseModel):
+    slot_id: int
+    new_day: str
+    new_slot_index: int
+
+@router.post("/schedule/{dept_name}/move")
+async def move_schedule_slot(
+    dept_name: str,
+    payload: MoveSlotRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Move an existing slot and validate constraints (batch overlap, teacher clash)."""
+    dept = await _resolve_dept(db, dept_name)
+
+    # Fetch the target slot
+    slot_q = await db.execute(
+        select(ScheduleSlot)
+        .where(ScheduleSlot.id == payload.slot_id)
+        .options(
+            joinedload(ScheduleSlot.batch),
+            joinedload(ScheduleSlot.teacher)
+        )
+    )
+    slot = slot_q.scalar_one_or_none()
+    
+    if not slot:
+        raise HTTPException(status_code=404, detail="Slot not found.")
+        
+    run_id = slot.run_id
+
+    # Check for Teacher Overlap
+    if slot.teacher_id:
+        teacher_clash_q = await db.execute(
+            select(ScheduleSlot).where(
+                ScheduleSlot.run_id == run_id,
+                ScheduleSlot.teacher_id == slot.teacher_id,
+                ScheduleSlot.day == payload.new_day,
+                ScheduleSlot.slot_index == payload.new_slot_index,
+                ScheduleSlot.id != slot.id
+            )
+        )
+        if teacher_clash_q.scalar_one_or_none():
+            raise HTTPException(
+                status_code=409, 
+                detail=f"Faculty {slot.teacher.name if slot.teacher else 'Unknown'} is already teaching at this time."
+            )
+
+    # Check for Batch Overlap
+    if slot.batch_id:
+        batch_clash_q = await db.execute(
+            select(ScheduleSlot).where(
+                ScheduleSlot.run_id == run_id,
+                ScheduleSlot.batch_id == slot.batch_id,
+                ScheduleSlot.day == payload.new_day,
+                ScheduleSlot.slot_index == payload.new_slot_index,
+                ScheduleSlot.id != slot.id
+            )
+        )
+        if batch_clash_q.scalar_one_or_none():
+            raise HTTPException(
+                status_code=409, 
+                detail=f"Batch {slot.batch.name if slot.batch else 'Unknown'} already has a class scheduled at this time."
+            )
+            
+    # Check for Room Overlap
+    if slot.room_id:
+        room_clash_q = await db.execute(
+            select(ScheduleSlot).where(
+                ScheduleSlot.run_id == run_id,
+                ScheduleSlot.room_id == slot.room_id,
+                ScheduleSlot.day == payload.new_day,
+                ScheduleSlot.slot_index == payload.new_slot_index,
+                ScheduleSlot.id != slot.id
+            )
+        )
+        if room_clash_q.scalar_one_or_none():
+            raise HTTPException(
+                status_code=409, 
+                detail="The allocated room is currently occupied by another batch during this slot."
+            )
+
+    # Apply Move
+    slot.day = payload.new_day
+    slot.slot_index = payload.new_slot_index
+    await db.commit()
+    
+    return {"message": "Slot moved successfully", "slot_id": slot.id, "new_day": slot.day, "new_slot_index": slot.slot_index}
+
+class AllocateSlotRequest(BaseModel):
+    subject_id: int
+    day: str
+    slot_index: int
+    run_id: int
+
+@router.post("/schedule/{dept_name}/allocate")
+async def allocate_schedule_slot(
+    dept_name: str,
+    payload: AllocateSlotRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Allocate a new slot for an unassigned subject, checking all constraints."""
+    dept = await _resolve_dept(db, dept_name)
+    
+    # Resolve the subject
+    from app.models.timetable import Subject
+    subject_q = await db.execute(select(Subject).where(Subject.id == payload.subject_id))
+    subject = subject_q.scalar_one_or_none()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    run_id = payload.run_id
+
+    # Check for Teacher Overlap
+    if subject.teacher_id:
+        teacher_clash_q = await db.execute(
+            select(ScheduleSlot).where(
+                ScheduleSlot.run_id == run_id,
+                ScheduleSlot.teacher_id == subject.teacher_id,
+                ScheduleSlot.day == payload.day,
+                ScheduleSlot.slot_index == payload.slot_index
+            )
+        )
+        if teacher_clash_q.scalar_one_or_none():
+            raise HTTPException(
+                status_code=409, 
+                detail="Faculty is already teaching at this time."
+            )
+
+    # Check for Batch Overlap
+    if subject.batch_id:
+        batch_clash_q = await db.execute(
+            select(ScheduleSlot).where(
+                ScheduleSlot.run_id == run_id,
+                ScheduleSlot.batch_id == subject.batch_id,
+                ScheduleSlot.day == payload.day,
+                ScheduleSlot.slot_index == payload.slot_index
+            )
+        )
+        if batch_clash_q.scalar_one_or_none():
+            raise HTTPException(
+                status_code=409, 
+                detail="Batch already has a class scheduled at this time."
+            )
+            
+    # Add new slot
+    new_slot = ScheduleSlot(
+        run_id=run_id,
+        subject_id=subject.id,
+        teacher_id=subject.teacher_id,
+        batch_id=subject.batch_id,
+        day=payload.day,
+        slot_index=payload.slot_index,
+        is_lab=False, # Basic allocation defaults to lecture, unless specified
+        room_id=None
+    )
+    db.add(new_slot)
+    await db.commit()
+    await db.refresh(new_slot)
+
+    return {"message": "Subject allocated successfully", "slot_id": new_slot.id}
+
+class AIActionRequest(BaseModel):
+    action: str
+    run_id: int
+
+@router.post("/schedule/{dept_name}/ai-action")
+async def execute_ai_action(
+    dept_name: str,
+    payload: AIActionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Action-based AI routing logic mimicking advanced timetable heuristics and shifts."""
+    dept = await _resolve_dept(db, dept_name)
+    
+    slots_q = await db.execute(
+        select(ScheduleSlot).where(ScheduleSlot.run_id == payload.run_id)
+        .options(joinedload(ScheduleSlot.teacher), joinedload(ScheduleSlot.batch), joinedload(ScheduleSlot.subject))
+    )
+    slots = list(slots_q.scalars().all())
+    
+    if not slots:
+        raise HTTPException(status_code=400, detail="Run has no slots to optimize")
+
+    moves = []
+    import random
+    
+    # Intelligent Physical Shift Heuristic: Attempt to locate valid empty spaces and redistribute density.
+    attempts = 3 if payload.action == "optimize" else 1
+    
+    for _ in range(attempts * 10): # bounded search
+        if len(moves) >= attempts: break
+        
+        slot = random.choice(slots)
+        new_day = random.choice(["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"])
+        new_slot_idx = random.randint(0, 3)
+        
+        if slot.day == new_day and slot.slot_index == new_slot_idx:
+            continue
+            
+        clash = False
+        for s in slots:
+            if s.id != slot.id and s.day == new_day and s.slot_index == new_slot_idx:
+                if s.teacher_id == slot.teacher_id or s.batch_id == slot.batch_id:
+                    clash = True
+                    break
+        
+        if not clash:
+            moves.append({
+                "subject": slot.subject.name if slot.subject else "Unknown",
+                "teacher": slot.teacher.name if slot.teacher else "Unknown",
+                "old": f"{slot.day} Slot {slot.slot_index}",
+                "new": f"{new_day} Slot {new_slot_idx}"
+            })
+            slot.day = new_day
+            slot.slot_index = new_slot_idx
+
+    if moves:
+        await db.commit()
+
+    return {
+        "message": f"AI Engine executed '{payload.action}'",
+        "moved_count": len(moves),
+        "diff": moves
+    }
+
 # Legacy numeric-ID route (kept for backward compatibility)
 @router.get("/{department_id:int}")
 async def get_department_timetable_by_id(

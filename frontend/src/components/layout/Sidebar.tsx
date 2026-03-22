@@ -3,211 +3,168 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  LayoutDashboard,
+  CalendarDays,
+  Building2,
+  Users,
+  BookOpen,
+  GraduationCap,
+  ChevronLeft,
+  ChevronRight,
+  ShieldAlert
+} from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
-// VERSION CHECK - This should appear in browser console
-console.log("[SIDEBAR v2.1] Loading Sidebar component with Data Management link");
-
-function LogoFallback({ size }: { size: number }) {
-  return (
-    <div
-      className="shrink-0 rounded bg-white/10 flex items-center justify-center font-bold text-white text-xs"
-      style={{ width: size, height: size }}
-    >
-      A
-    </div>
-  );
-}
-
-function LogoImage({ collapsed }: { collapsed: boolean }) {
-  const [failed, setFailed] = useState(false);
-  const size = collapsed ? 32 : 36;
-  if (failed) return <LogoFallback size={size} />;
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src="/logo.png"
-      alt="Atlas Skilltech University"
-      width={size}
-      height={size}
-      className="shrink-0 rounded object-contain"
-      onError={() => setFailed(true)}
-    />
-  );
-}
-
-const allNavItems = [
-  { href: "/", label: "Dashboard", icon: DashboardIcon, roles: ["ADMIN", "STAFF"] },
-  { href: "/admin/data", label: "Data Management", icon: DataIcon, roles: ["ADMIN"] },
-  { href: "/scheduler", label: "Scheduler", icon: SchedulerIcon, roles: ["ADMIN"] },
-  { href: "/timetable", label: "Timetable", icon: TimetableIcon, roles: ["ADMIN"] },
-  { href: "/my-timetable", label: "My Timetable", icon: TimetableIcon, roles: ["STAFF"] },
-  { href: "/admin/users", label: "Users", icon: UsersIcon, roles: ["ADMIN"] },
-  { href: "/admin/audit", label: "Audit Logs", icon: AuditIcon, roles: ["ADMIN"] },
-  { href: "/admin/leaves", label: "Leave Requests", icon: LeaveIcon, roles: ["ADMIN"] },
-  { href: "/ai/policies", label: "AI Policies", icon: PolicyIcon, roles: ["ADMIN"] },
-  { href: "/ai/insights", label: "AI Insights", icon: InsightsIcon, roles: ["ADMIN"] },
-  { href: "/settings", label: "Settings", icon: SettingsIcon, roles: ["ADMIN", "STAFF"] },
+const mainNavItems = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/scheduler", label: "Scheduler", icon: CalendarDays },
 ];
 
-function DashboardIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-    </svg>
-  );
-}
-
-function TimetableIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-    </svg>
-  );
-}
-
-function SchedulerIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  );
-}
-
-function UsersIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  );
-}
-
-function AuditIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-    </svg>
-  );
-}
-
-function LeaveIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-    </svg>
-  );
-}
-
-function PolicyIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-    </svg>
-  );
-}
-
-function InsightsIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-    </svg>
-  );
-}
-
-function SettingsIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  );
-}
-
-function DataIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-    </svg>
-  );
-}
-
-function ChevronIcon({ collapsed }: { collapsed: boolean }) {
-  return (
-    <svg
-      className={`w-5 h-5 text-white/80 transition-transform ${collapsed ? "rotate-180" : ""}`}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-    </svg>
-  );
-}
+const adminNavItems = [
+  { href: "/admin/departments", label: "Departments", icon: Building2 },
+  { href: "/admin/batches", label: "Batches", icon: Users },
+  { href: "/admin/subjects", label: "Subjects", icon: BookOpen },
+  { href: "/admin/faculty", label: "Faculty", icon: GraduationCap },
+];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const { user } = useAuth();
-
-  // DEBUG: Log user role
-  console.log("[Sidebar] User:", user?.name, "Role:", user?.role);
-
-  // Show ALL nav items regardless of role (for testing)
-  const navItems = allNavItems;
-  const forceIncludeDataMgmt = true;
+  const isAdmin = user?.role === "ADMIN";
 
   return (
-    <aside
-      data-sidebar-version="2.1"
-      className={`flex flex-col bg-[var(--sidebar-bg)] text-white transition-all duration-300 ease-in-out relative ${
-        collapsed ? "w-20" : "w-64"
-      }`}
+    <motion.aside
+      animate={{ width: collapsed ? 80 : 256 }}
+      transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+      className="relative flex flex-col bg-slate-950 border-r border-slate-800 text-slate-300 z-30"
     >
-      {/* VERSION INDICATOR - Remove after testing */}
-      <div className="absolute -top-6 left-0 bg-red-600 text-white text-xs px-2 py-1 z-50">
-        Sidebar v2.1 - DATA MGMT ADDED
-      </div>
-      
-      {/* FORCE ADD DATA MANAGEMENT LINK FOR TESTING */}
-      <div className="px-2 py-1 bg-green-600 text-white text-xs">
-        <Link href="/admin/data" className="flex items-center gap-2">
-          <span>📊</span>
-          {!collapsed && <span>Data Management</span>}
-        </Link>
-      </div>
-      <div className={`flex items-center h-16 border-b border-white/10 shrink-0 ${collapsed ? "px-2" : "px-4"}`}>
-        <Link href="/" className={`flex items-center gap-2 min-w-0 flex-1 ${collapsed ? "justify-center" : ""}`}>
-          <LogoImage collapsed={collapsed} />
-          {!collapsed && <span className="font-semibold text-sm truncate">ATLAS SKILLTECH</span>}
-        </Link>
+      <div className="flex h-16 items-center justify-between px-4 shrink-0 border-b border-slate-800/50">
+        <AnimatePresence mode="popLayout">
+          {!collapsed && (
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="flex items-center gap-3 overflow-hidden"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 shadow-sm shadow-indigo-500/20 text-white font-bold">
+                A
+              </div>
+              <span className="font-semibold text-slate-100 tracking-tight whitespace-nowrap">Atlas Scheduler</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        {collapsed && (
+          <div className="w-full flex justify-center">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 shadow-sm text-white font-bold">
+              A
+            </div>
+          </div>
+        )}
+
         <button
-          type="button"
           onClick={() => setCollapsed(!collapsed)}
-          className="p-1.5 rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors shrink-0"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="absolute -right-3 top-5 flex h-6 w-6 items-center justify-center rounded-full border border-slate-700 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors z-40"
         >
-          <ChevronIcon collapsed={collapsed} />
+          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
         </button>
       </div>
 
-      <nav className="flex-1 py-4 px-2 space-y-0.5">
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                isActive ? "bg-[var(--sidebar-active)] text-white" : "text-white/80 hover:bg-white/10 hover:text-white"
-              } ${collapsed ? "justify-center" : ""}`}
-            >
-              <Icon className="w-6 h-6 shrink-0" />
-              {!collapsed && <span className="font-medium text-sm truncate">{label}</span>}
-            </Link>
-          );
-        })}
-      </nav>
-    </aside>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-6 custom-scrollbar">
+        <div className="px-3 space-y-1">
+          {mainNavItems.map(({ href, label, icon: Icon }) => {
+            const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+            return (
+              <Link key={href} href={href}>
+                <div
+                  className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200 ${
+                    isActive
+                      ? "bg-slate-800/80 text-white"
+                      : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="active-indicator"
+                      className="absolute left-0 top-1/2 -mt-3 h-6 w-1 rounded-r-full bg-indigo-500"
+                    />
+                  )}
+                  <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-indigo-400" : ""}`} />
+                  <AnimatePresence mode="popLayout">
+                    {!collapsed && (
+                      <motion.span
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: "auto" }}
+                        exit={{ opacity: 0, width: 0 }}
+                        className="font-medium text-sm whitespace-nowrap"
+                      >
+                        {label}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+
+        {isAdmin && (
+          <div className="mt-8 px-3">
+            <AnimatePresence mode="popLayout">
+              {!collapsed && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="mb-2 px-3 text-xs font-semibold tracking-wider text-slate-500 uppercase"
+                >
+                  Admin
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <div className="space-y-1">
+              {adminNavItems.map(({ href, label, icon: Icon }) => {
+                const isActive = pathname.startsWith(href);
+                return (
+                  <Link key={href} href={href}>
+                    <div
+                      className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200 ${
+                        isActive
+                          ? "bg-slate-800/80 text-white"
+                          : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                      }`}
+                    >
+                      {isActive && (
+                        <motion.div
+                          layoutId="active-indicator"
+                          className="absolute left-0 top-1/2 -mt-3 h-6 w-1 rounded-r-full bg-indigo-500"
+                        />
+                      )}
+                      <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-indigo-400" : ""}`} />
+                      <AnimatePresence mode="popLayout">
+                        {!collapsed && (
+                          <motion.span
+                            initial={{ opacity: 0, width: 0 }}
+                            animate={{ opacity: 1, width: "auto" }}
+                            exit={{ opacity: 0, width: 0 }}
+                            className="font-medium text-sm whitespace-nowrap"
+                          >
+                            {label}
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.aside>
   );
 }

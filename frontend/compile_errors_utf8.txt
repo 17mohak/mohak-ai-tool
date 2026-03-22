@@ -1,0 +1,3 @@
+﻿src/app/(dashboard)/scheduler/page.tsx(354,38): error TS2802: Type 'MapIterator<[number, number]>' can only be iterated through when using the '--downlevelIteration' flag or with a '--target' of 'es2015' or higher.
+src/app/(dashboard)/scheduler/page.tsx(387,46): error TS2339: Property 'runs' does not exist on type '{ variants: VariantResult[]; }'.
+src/app/(dashboard)/scheduler/page.tsx(387,59): error TS2339: Property 'data' does not exist on type '{ variants: VariantResult[]; }'.

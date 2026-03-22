@@ -1,7 +1,5 @@
 "use client";
 
-console.log("🔥 LIVE CODE ACTIVE 🔥");
-
 import React, { createContext, useContext, useState, ReactNode } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";

@@ -533,26 +533,83 @@ async def delete_pinned_slot(pin_id: int, db: AsyncSession = Depends(get_db)):
 # VALIDATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+# Slot configuration for 6-slot days with Wednesday elective reduction
+# 4 regular days (Mon, Tue, Thu, Fri) × 6 slots = 24 slots
+# 1 Wednesday × 4 slots (2 slots reserved for electives) = 4 slots
+# Total = 28 available slots per week
+REGULAR_DAY_SLOTS = 6
+WEDNESDAY_SLOTS = 4  # Reduced due to elective period
+REGULAR_DAYS = 4  # Mon, Tue, Thu, Fri
+TOTAL_WEEKLY_PERIODS = (REGULAR_DAYS * REGULAR_DAY_SLOTS) + WEDNESDAY_SLOTS  # 28
+
+# Legacy slot labels for reference (4-slot structure)
 SLOT_LABELS = [
     {"index": 0, "label": "09:00 – 10:30"},
     {"index": 1, "label": "11:00 – 12:30"},
     {"index": 2, "label": "14:00 – 15:30"},
     {"index": 3, "label": "16:00 – 17:30"},
 ]
-TOTAL_WEEKLY_PERIODS = 5 * len(SLOT_LABELS)  # 20
+
+
+class ValidateRequest(BaseModel):
+    """Request body for validation endpoint."""
+    batch_id: int | None = None  # If provided, validate ONLY this batch
 
 
 @router.post("/validate/{dept_id}")
-async def validate_department(dept_id: int, db: AsyncSession = Depends(get_db)):
-    """Pre-generation diagnostic checks for a department."""
+async def validate_department(
+    dept_id: int,
+    body: ValidateRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Pre-generation diagnostic checks for a department.
+    
+    If batch_id is provided in the request body, validation is scoped
+    STRICTLY to that batch only. Other batches are ignored.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    selected_batch_id = body.batch_id if body else None
+    logger.info(f"[VALIDATE] Called for dept_id={dept_id}, selected_batch_id={selected_batch_id}")
+    
     dept = await _get(db, Department, dept_id)
     warnings: list[dict] = []
     errors: list[dict] = []
 
-    # Batches
-    br = await db.execute(select(Batch).where(Batch.department_id == dept_id))
-    batches = br.scalars().all()
-    if not batches:
+    # Batches - if batch_id specified, only fetch that batch
+    if selected_batch_id:
+        br = await db.execute(
+            select(Batch).where(
+                Batch.department_id == dept_id,
+                Batch.id == selected_batch_id
+            )
+        )
+        batches = br.scalars().all()
+        logger.info(f"[VALIDATE] Filtered to batch_id={selected_batch_id}, found={len(batches)}")
+        if not batches:
+            errors.append(
+                {
+                    "type": "batch_not_found",
+                    "batch_id": selected_batch_id,
+                    "message": f"Batch with ID {selected_batch_id} not found in department {dept.name}.",
+                }
+            )
+            return {
+                "department": dept.name,
+                "department_id": dept.id,
+                "batch_id": selected_batch_id,
+                "can_generate": False,
+                "errors": errors,
+                "warnings": warnings,
+                "summary": {"batches": 0, "teachers": 0, "subjects": 0, "rooms": 0},
+            }
+    else:
+        br = await db.execute(select(Batch).where(Batch.department_id == dept_id))
+        batches = br.scalars().all()
+        logger.info(f"[VALIDATE] No batch filter, found {len(batches)} batches")
+
+    if not batches and not selected_batch_id:
         errors.append(
             {"type": "no_batches", "message": f"No batches found for {dept.name}."}
         )
@@ -565,10 +622,27 @@ async def validate_department(dept_id: int, db: AsyncSession = Depends(get_db)):
             {"type": "no_teachers", "message": f"No teachers found for {dept.name}."}
         )
 
-    # Subjects
-    sr = await db.execute(select(Subject).where(Subject.department_id == dept_id))
+    # Subjects - filter by batch_id if specified
+    if selected_batch_id:
+        sr = await db.execute(
+            select(Subject).where(
+                Subject.department_id == dept_id,
+                Subject.batch_id == selected_batch_id
+            )
+        )
+    else:
+        sr = await db.execute(select(Subject).where(Subject.department_id == dept_id))
     subjects = sr.scalars().all()
-    if not subjects:
+    if not subjects and selected_batch_id:
+        logger.warning(f"[VALIDATE] Batch {selected_batch_id} has no subjects")
+        warnings.append(
+            {
+                "type": "empty_batch",
+                "batch_id": selected_batch_id,
+                "message": f"Selected batch has no subjects assigned.",
+            }
+        )
+    elif not subjects:
         errors.append(
             {"type": "no_subjects", "message": f"No subjects found for {dept.name}."}
         )
@@ -579,45 +653,61 @@ async def validate_department(dept_id: int, db: AsyncSession = Depends(get_db)):
     if not rooms:
         errors.append({"type": "no_rooms", "message": "No rooms exist in the system."})
 
-    # Check credit load per batch
+    # Check credit load per batch - ONLY for selected batch if specified
     for batch in batches:
         batch_subjects = [s for s in subjects if s.batch_id == batch.id]
         total_credits = sum(s.credits for s in batch_subjects)
+        
+        logger.info(f"[VALIDATE] Batch '{batch.name}' (ID={batch.id}): {total_credits} credits required, {TOTAL_WEEKLY_PERIODS} available")
+        
         if total_credits > TOTAL_WEEKLY_PERIODS:
             errors.append(
                 {
                     "type": "overloaded_batch",
+                    "batch_id": batch.id,
+                    "batch_name": batch.name,
+                    "required_slots": total_credits,
+                    "available_slots": TOTAL_WEEKLY_PERIODS,
                     "message": (
                         f"Batch '{batch.name}' requires {total_credits} weekly slots "
                         f"but only {TOTAL_WEEKLY_PERIODS} periods are available."
                     ),
                 }
             )
-        elif total_credits == 0:
+        elif total_credits == 0 and not selected_batch_id:
             warnings.append(
                 {
                     "type": "empty_batch",
+                    "batch_id": batch.id,
+                    "batch_name": batch.name,
                     "message": f"Batch '{batch.name}' has no subjects assigned.",
                 }
             )
 
-    # Subjects without teacher or batch assignment
-    unassigned = [s for s in subjects if s.batch_id is None or s.teacher_id is None]
+    # Subjects without teacher or batch assignment - only for selected batch
+    if selected_batch_id:
+        unassigned = [s for s in subjects if s.teacher_id is None]
+    else:
+        unassigned = [s for s in subjects if s.batch_id is None or s.teacher_id is None]
+    
     if unassigned:
         warnings.append(
             {
                 "type": "unassigned_subjects",
-                "message": f"{len(unassigned)} subject(s) have no batch or teacher assigned.",
+                "batch_id": selected_batch_id,
+                "message": f"{len(unassigned)} subject(s) have no teacher assigned." if selected_batch_id else f"{len(unassigned)} subject(s) have no batch or teacher assigned.",
             }
         )
 
-    # Room capacity check
+    # Room capacity check - only for selected batch
     for batch in batches:
         suitable_rooms = [r for r in rooms if r.capacity >= batch.size]
         if not suitable_rooms:
             errors.append(
                 {
                     "type": "no_suitable_room",
+                    "batch_id": batch.id,
+                    "batch_name": batch.name,
                     "message": (
                         f"No room has capacity >= {batch.size} for batch '{batch.name}'."
                     ),
@@ -625,10 +715,11 @@ async def validate_department(dept_id: int, db: AsyncSession = Depends(get_db)):
             )
 
     can_generate = len(errors) == 0
-
-    return {
+    
+    response = {
         "department": dept.name,
         "department_id": dept.id,
+        "batch_id": selected_batch_id,
         "can_generate": can_generate,
         "errors": errors,
         "warnings": warnings,
@@ -637,8 +728,14 @@ async def validate_department(dept_id: int, db: AsyncSession = Depends(get_db)):
             "teachers": len(teachers),
             "subjects": len(subjects),
             "rooms": len(rooms),
+            "required_slots": sum(s.credits for s in subjects if s.batch_id in [b.id for b in batches]),
+            "available_slots": TOTAL_WEEKLY_PERIODS,
         },
     }
+    
+    logger.info(f"[VALIDATE] Response for batch_id={selected_batch_id}: can_generate={can_generate}, errors={len(errors)}")
+    
+    return response
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -938,6 +1035,7 @@ async def generate_variants(
     4. Exactly 3 new runs will exist after generation.
     5. Variants are guaranteed different via random seeding.
     """
+    print(f"🚀🚀🚀 GENERATE-VARIANTS CALLED for {dept_name} 🚀🚀🚀")
     dept = await _resolve_dept(db, dept_name)
 
     from app.modules.timetable_ai.solver import generate_schedule
@@ -964,14 +1062,17 @@ async def generate_variants(
                 "task_status": "Running",
             }
         )
+        print(f"   Generating variant {label} (seed: {random_seed})...")
         res = await generate_schedule(
             db, dept.id, variant_id=variant_id, random_seed=random_seed
         )
+        print(f"   Variant {label} result: status={res.get('status')}, run_id={res.get('run_id')}, slots_created={res.get('slots_created')}")
         res["variant"] = label
         res["random_seed"] = random_seed
         results.append(res)
 
     success_count = sum(1 for r in results if r.get("status") == "SUCCESS")
+    print(f"✅ Generation complete: {success_count}/3 variants succeeded")
     await broadcast.broadcast(
         {
             "type": "task_log",
@@ -997,7 +1098,12 @@ async def get_run_slots(
     current_user=Depends(get_current_user),
 ):
     """Return all schedule slots for a run, optionally filtered by batch."""
+    print(f"📡📡📡 GET /runs/{run_id}/slots CALLED 📡📡📡")
+    print(f"   batch_id filter: {batch_id}")
+    
     run = await _get(db, TimetableRun, run_id)
+    print(f"   Run found: {run.id}, status: {run.status.value}")
+    
     q = (
         select(ScheduleSlot)
         .options(
@@ -1010,22 +1116,39 @@ async def get_run_slots(
     )
     if batch_id is not None:
         q = q.where(ScheduleSlot.batch_id == batch_id)
+    
     result = await db.execute(q)
     slots = result.scalars().all()
-    return [
+    print(f"   Slots found in DB: {len(slots)}")
+    
+    if len(slots) == 0:
+        # Debug: Check if run exists and has any slots without filter
+        from sqlalchemy import func
+        count_result = await db.execute(
+            select(func.count(ScheduleSlot.id)).where(ScheduleSlot.run_id == run_id)
+        )
+        total_count = count_result.scalar()
+        print(f"   Total slots for run {run_id} (no filter): {total_count}")
+    
+    response = [
         {
             "id": s.id,
             "day": s.day.value,
             "slot_index": s.slot_index,
             "subject": s.subject.name if s.subject else "",
+            "subject_id": s.subject_id,
             "teacher": s.teacher.name if s.teacher else "",
+            "teacher_id": s.teacher_id,
             "room": s.room.name if s.room else "",
+            "room_id": s.room_id,
             "batch": s.batch.name if s.batch else "",
             "batch_id": s.batch_id,
             "is_lab": s.batch.parent_batch_id is not None if s.batch else False,
         }
         for s in slots
     ]
+    print(f"   Returning {len(response)} slots")
+    return response
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

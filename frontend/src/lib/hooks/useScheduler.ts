@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
 
 /* ── Types ─────────────────────────────────── */
 export interface DeptRow { id: number; name: string; batch_count: number; teacher_count: number; subject_count: number; }
@@ -18,15 +19,22 @@ export function useData<T>(path: string, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const refresh = useCallback(async () => {
+    if (!path) return;
     setLoading(true);
     setError(null);
     try {
       const res = await api<T>(path);
       setData(res);
     } catch (e: any) {
-      setError(e.message ?? "Failed");
+      const msg = e.message ?? "Failed";
+      setError(msg);
+      // Only toast on severe network or 500 errors to prevent 404 spam.
+      if (msg.includes("Network Error") || msg.includes("50")) {
+         toast({ title: "API Unavailable", description: msg, type: "error" });
+      }
     } finally {
       setLoading(false);
     }

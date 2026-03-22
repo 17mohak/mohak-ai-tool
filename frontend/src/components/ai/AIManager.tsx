@@ -16,6 +16,8 @@ interface AIManagerProps {
   onClose: () => void;
 }
 
+import { AnimatePresence, motion } from "framer-motion";
+
 export default function AIManager({ isOpen, onClose }: AIManagerProps) {
   const pathname = usePathname();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -70,11 +72,22 @@ export default function AIManager({ isOpen, onClose }: AIManagerProps) {
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl h-[600px] flex flex-col border border-slate-700">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+        >
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl h-[600px] flex flex-col border border-slate-700 overflow-hidden"
+          >
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <span className="text-2xl">🤖</span>
@@ -193,7 +206,9 @@ export default function AIManager({ isOpen, onClose }: AIManagerProps) {
             Current page: {pathname} • Press Enter to send
           </p>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+   )}
+  </AnimatePresence>
   );
 }
