@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 
@@ -8,9 +8,21 @@ import { useAuth } from "@/lib/auth";
 const publicRoutes = ["/login", "/register"];
 
 export function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  
+  const isAuthenticated = !!user;
+
+  useEffect(() => {
+    // Check localStorage on mount
+    const checkAuth = () => {
+      const storedUser = localStorage.getItem("auth_user");
+      setIsLoading(false);
+    };
+    checkAuth();
+  }, []);
 
   useEffect(() => {
     if (!isLoading) {

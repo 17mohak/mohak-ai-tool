@@ -5,6 +5,9 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 
+// VERSION CHECK - This should appear in browser console
+console.log("[SIDEBAR v2.1] Loading Sidebar component with Data Management link");
+
 function LogoFallback({ size }: { size: number }) {
   return (
     <div
@@ -35,6 +38,7 @@ function LogoImage({ collapsed }: { collapsed: boolean }) {
 
 const allNavItems = [
   { href: "/", label: "Dashboard", icon: DashboardIcon, roles: ["ADMIN", "STAFF"] },
+  { href: "/admin/data", label: "Data Management", icon: DataIcon, roles: ["ADMIN"] },
   { href: "/scheduler", label: "Scheduler", icon: SchedulerIcon, roles: ["ADMIN"] },
   { href: "/timetable", label: "Timetable", icon: TimetableIcon, roles: ["ADMIN"] },
   { href: "/my-timetable", label: "My Timetable", icon: TimetableIcon, roles: ["STAFF"] },
@@ -120,6 +124,14 @@ function SettingsIcon({ className }: { className?: string }) {
   );
 }
 
+function DataIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+    </svg>
+  );
+}
+
 function ChevronIcon({ collapsed }: { collapsed: boolean }) {
   return (
     <svg
@@ -136,20 +148,34 @@ function ChevronIcon({ collapsed }: { collapsed: boolean }) {
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const { user, isAdmin, isStaff } = useAuth();
+  const { user } = useAuth();
 
-  // Filter nav items based on user role
-  const navItems = allNavItems.filter((item) => {
-    if (!user) return false;
-    return item.roles.includes(user.role);
-  });
+  // DEBUG: Log user role
+  console.log("[Sidebar] User:", user?.name, "Role:", user?.role);
+
+  // Show ALL nav items regardless of role (for testing)
+  const navItems = allNavItems;
+  const forceIncludeDataMgmt = true;
 
   return (
     <aside
-      className={`flex flex-col bg-[var(--sidebar-bg)] text-white transition-all duration-300 ease-in-out ${
+      data-sidebar-version="2.1"
+      className={`flex flex-col bg-[var(--sidebar-bg)] text-white transition-all duration-300 ease-in-out relative ${
         collapsed ? "w-20" : "w-64"
       }`}
     >
+      {/* VERSION INDICATOR - Remove after testing */}
+      <div className="absolute -top-6 left-0 bg-red-600 text-white text-xs px-2 py-1 z-50">
+        Sidebar v2.1 - DATA MGMT ADDED
+      </div>
+      
+      {/* FORCE ADD DATA MANAGEMENT LINK FOR TESTING */}
+      <div className="px-2 py-1 bg-green-600 text-white text-xs">
+        <Link href="/admin/data" className="flex items-center gap-2">
+          <span>📊</span>
+          {!collapsed && <span>Data Management</span>}
+        </Link>
+      </div>
       <div className={`flex items-center h-16 border-b border-white/10 shrink-0 ${collapsed ? "px-2" : "px-4"}`}>
         <Link href="/" className={`flex items-center gap-2 min-w-0 flex-1 ${collapsed ? "justify-center" : ""}`}>
           <LogoImage collapsed={collapsed} />

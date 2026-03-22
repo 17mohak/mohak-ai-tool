@@ -6,7 +6,8 @@ import { useAuth } from "@/lib/auth";
 
 export default function Header() {
   const [showAIManager, setShowAIManager] = useState(false);
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const handleLogout = () => {
@@ -68,7 +69,7 @@ export default function Header() {
             </div>
             <div className="hidden sm:block text-left">
               <p className="text-sm font-medium text-slate-200">{user?.email}</p>
-              <p className="text-xs text-slate-400 capitalize">{user?.role.toLowerCase()}</p>
+               <p className="text-xs text-slate-400 capitalize">{(user?.role || "Unknown").toLowerCase()}</p>
             </div>
             <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -84,7 +85,7 @@ export default function Header() {
               <div className="absolute right-0 top-full mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-50 py-1">
                 <div className="px-4 py-2 border-b border-slate-700">
                   <p className="text-sm font-medium text-slate-200 truncate">{user?.email}</p>
-                  <p className="text-xs text-slate-400 capitalize">{user?.role.toLowerCase()}</p>
+<p className="text-xs text-slate-400 capitalize">{(user?.role || "Unknown").toLowerCase()}</p>
                 </div>
                 <button
                   onClick={handleLogout}

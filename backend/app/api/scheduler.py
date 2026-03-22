@@ -105,6 +105,9 @@ async def list_departments(
     """List all departments with counts."""
     result = await db.execute(select(Department).order_by(Department.name))
     departments = result.scalars().all()
+
+    print(f"[API DEBUG] Departments count: {len(departments)}")
+
     out = []
     for d in departments:
         bc = await db.execute(

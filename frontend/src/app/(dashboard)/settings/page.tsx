@@ -24,17 +24,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Role</label>
-              <p className="text-slate-100 capitalize">{user.role.toLowerCase()}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Status</label>
-              <p className="text-slate-100 capitalize">{user.status.toLowerCase()}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Member Since</label>
-              <p className="text-slate-100">
-                {new Date(user.created_at).toLocaleDateString()}
-              </p>
+              <p className="text-slate-100 capitalize">{(user.role || "Unknown").toLowerCase()}</p>
             </div>
           </div>
         </div>

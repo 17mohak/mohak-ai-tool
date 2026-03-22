@@ -30,6 +30,14 @@ async def lifespan(app: FastAPI):
         )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Self-heal database on startup
+    from app.startup.db_fix import fix_user_roles
+    from app.startup.db_seed import seed_departments
+
+    await fix_user_roles()
+    await seed_departments()
+
     yield
     await engine.dispose()
 
