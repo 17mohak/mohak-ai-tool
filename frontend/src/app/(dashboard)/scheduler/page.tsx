@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { api, fetchWithAuth } from "@/lib/api";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 
 /* ─── Types matching backend contracts ─── */
 interface Dept { id: number; name: string }
@@ -241,7 +242,14 @@ export default function SchedulerPage() {
 
     const loadDepartments = async () => {
       try {
+        // DEBUG: Check token
+        const token = localStorage.getItem("auth_token");
+        console.log("🔐 AUTH DEBUG: Token exists:", !!token);
+        console.log("🔐 AUTH DEBUG: Token first 20 chars:", token ? token.substring(0, 20) + "..." : "NONE");
+        
         const response = await api<DeptListItem[] | { data: DeptListItem[] }>("/api/scheduler/departments");
+        
+        console.log("🔐 API DEBUG: Departments response:", response);
         
         // Normalize: handle both direct array and { data: array } formats (CASE B/C fix)
         const d = Array.isArray(response) 
@@ -254,14 +262,15 @@ export default function SchedulerPage() {
           return;
         }
         
+        console.log("🔐 API DEBUG: Departments loaded:", d.length);
         setDeptList(d);
         
         if (d.length > 0) {
           setSelectedDeptName(d[0].name);
         }
       } catch (err) {
-        console.error("[Scheduler] Failed to load departments:", err);
-        setError(err instanceof Error ? err.message : "Failed to load departments");
+        console.error("🔐 AUTH ERROR: Failed to load departments:", err);
+        setError(err instanceof Error ? err.message : "Failed to load departments - check authentication");
       } finally {
         setLoading(false);
       }
@@ -725,12 +734,11 @@ export default function SchedulerPage() {
     setAiLogs(prev => [...prev.slice(-9), logEntry]);
     
     try {
-      const res = await fetchWithAuth(`/api/scheduler/schedule/${encodeURIComponent(selectedDeptName)}/ai-action`, {
+      const res = await fetchWithAuth(`/api/mcp/execute`, {
         method: "POST",
         body: JSON.stringify({ 
-          action, 
-          run_id: selectedRunId,
-          prompt: customInput || undefined
+          command: customInput || action, 
+          context: { runId: selectedRunId, batchId: selectedBatchId }
         })
       });
       const data = await res.json();
@@ -851,14 +859,13 @@ export default function SchedulerPage() {
   }, [gridSlots]);
   
   const getCell = (day: string, slotIndex: number): SlotEntry[] => {
-    const normalizedDay = normalizeDay(day);
-    const key = `${normalizedDay}-${slotIndex}`;
-    const slots = slotMap.get(key) || [];
-    
-    // DEBUG: Log EVERY cell lookup
-    console.log(`getCell("${day}" → "${normalizedDay}", ${slotIndex}):`, slots.length, "slots");
-    
-    return slots;
+    const entries = gridSlots.filter((s) => {
+      return (
+        normalizeDay(s.day) === normalizeDay(day) &&
+        Number(s.slot_index) === Number(slotIndex)
+      );
+    });
+    return entries;
   };
 
   // Use direct runs state for immediate updates - ALWAYS use local runs, NEVER state?.runs
@@ -1128,14 +1135,27 @@ export default function SchedulerPage() {
     return load;
   }, [gridSlots]);
 
-  /* ── Unassigned Subjects computation ── */
-  const unassignedSubjects = useMemo(() => {
+  /* ── Scoped Subjects & Faculty ── */
+  const filteredSubjects = useMemo(() => {
     if (!state?.subjects) return [];
-    return state.subjects.filter(s => {
+    if (!selectedBatchId) return state.subjects;
+    return state.subjects.filter(s => s.batch_id === selectedBatchId);
+  }, [state?.subjects, selectedBatchId]);
+
+  const filteredFaculty = useMemo(() => {
+    if (!state?.teachers) return [];
+    if (!selectedBatchId) return state.teachers;
+    return state.teachers.filter(f =>
+      (f as any).subjects?.some((s: any) => s.batch_id === selectedBatchId)
+    );
+  }, [state?.teachers, selectedBatchId]);
+
+  const unassignedSubjects = useMemo(() => {
+    return filteredSubjects.filter(s => {
       const allocCount = gridSlots.filter(g => g.subject_id === s.id).length;
       return allocCount < s.credits; 
     });
-  }, [state?.subjects, gridSlots]);
+  }, [filteredSubjects, gridSlots]);
 
   /* ── Batch hierarchy display with tree structure ── */
   const buildBatchTree = useMemo(() => {
@@ -1183,32 +1203,74 @@ export default function SchedulerPage() {
 
   /* ── Error State ── */
   if (error) {
+    const isAuthError = error.toLowerCase().includes("unauthorized") || 
+                        error.toLowerCase().includes("401") ||
+                        error.toLowerCase().includes("auth");
+    
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <div className="text-red-400 text-center">
-          <p className="font-semibold">Error loading scheduler</p>
+          <p className="font-semibold">{isAuthError ? "Authentication Required" : "Error loading scheduler"}</p>
           <p className="text-sm mt-1">{error}</p>
+          {isAuthError && (
+            <p className="text-xs text-amber-400 mt-2">
+              Please log in again to access the scheduler
+            </p>
+          )}
         </div>
-        <button 
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg text-sm hover:bg-slate-600 transition-colors"
-        >
-          Retry
-        </button>
+        <div className="flex gap-2">
+          {isAuthError && (
+            <button 
+              onClick={() => window.location.href = "/login"}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-500 transition-colors"
+            >
+              Go to Login
+            </button>
+          )}
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg text-sm hover:bg-slate-600 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
 
   /* ── Empty Departments State ── */
   if (deptList.length === 0) {
+    // Check if token exists - if not, might be auth issue
+    const token = typeof window !== 'undefined' ? localStorage.getItem("auth_token") : null;
+    const mightBeAuthIssue = !token;
+    
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <div className="text-slate-400 text-center">
-          <p className="font-semibold">No departments found</p>
-          <p className="text-sm mt-1">Create a department to get started</p>
+          <p className="font-semibold">{mightBeAuthIssue ? "Not Logged In" : "No departments found"}</p>
+          <p className="text-sm mt-1">
+            {mightBeAuthIssue 
+              ? "Please log in to access the scheduler" 
+              : "Create a department to get started"}
+          </p>
+          {mightBeAuthIssue && (
+            <p className="text-xs text-amber-400 mt-2">
+              No authentication token found
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {mightBeAuthIssue && (
+            <button 
+              onClick={() => window.location.href = "/login"}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-500 transition-colors"
+            >
+              Go to Login
+            </button>
+          )}
           <button 
             onClick={() => window.location.reload()}
-            className="mt-4 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded transition-colors"
+            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded transition-colors"
           >
             Reload Page
           </button>
@@ -1236,90 +1298,54 @@ export default function SchedulerPage() {
   }
   console.log("[RENDER] ========================================");
 
+  const COLOR_MAP: Record<string, string> = {
+    "blue": "bg-blue-500/20 border-blue-500/50 text-blue-200 shadow-[0_0_15px_rgba(59,130,246,0.2)]",
+    "emerald": "bg-emerald-500/20 border-emerald-500/50 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.2)]",
+    "amber": "bg-amber-500/20 border-amber-500/50 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.2)]",
+    "rose": "bg-rose-500/20 border-rose-500/50 text-rose-200 shadow-[0_0_15px_rgba(244,63,94,0.2)]",
+    "cyan": "bg-cyan-500/20 border-cyan-500/50 text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.2)]",
+    "violet": "bg-violet-500/20 border-violet-500/50 text-violet-200 shadow-[0_0_15px_rgba(139,92,246,0.2)]",
+  };
+  const TEACHER_COLORS = ["blue", "emerald", "violet", "amber", "rose", "cyan"];
+  const getTeacherColorClass = (teacherId: number) => {
+    const colorIndex = Math.abs(teacherId || 0) % TEACHER_COLORS.length;
+    return COLOR_MAP[TEACHER_COLORS[colorIndex]];
+  };
+
   return (
-    <div className="flex flex-col h-[calc(100vh-5rem)] relative overflow-hidden bg-slate-950">
-      {/* DEBUG PANEL - CRITICAL STATE MONITORING + RAW NETWORK */}
-      <div className="bg-slate-950 border-b-2 border-indigo-500/50 p-3 text-[11px] font-mono">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-indigo-400 font-bold">🔥 RAW NETWORK TRACE</div>
-          <div className="text-[10px] text-slate-500">Check browser console for detailed logs</div>
-        </div>
-        <div className="grid grid-cols-6 gap-3">
-          <div className={`px-2 py-1 rounded ${genIssues?.length ? "bg-red-950 border border-red-500/50" : "bg-slate-900"}`}>
-            <div className="text-[9px] text-slate-500 uppercase">Issues</div>
-            <div className={genIssues?.length ? "text-red-400 font-bold" : "text-emerald-400 font-bold"}>{genIssues?.length || 0}</div>
-          </div>
-          <div className={`px-2 py-1 rounded ${runs.length > 0 ? "bg-emerald-950 border border-emerald-500/50" : "bg-slate-900"}`}>
-            <div className="text-[9px] text-slate-500 uppercase">Runs</div>
-            <div className={runs.length > 0 ? "text-emerald-400 font-bold text-lg" : "text-slate-500 font-bold"}>{runs.length}</div>
-          </div>
-          <div className={`px-2 py-1 rounded ${selectedRunId ? "bg-emerald-950 border border-emerald-500/50" : "bg-amber-950 border border-amber-500/50"}`}>
-            <div className="text-[9px] text-slate-500 uppercase">Selected</div>
-            <div className={selectedRunId ? "text-emerald-400 font-bold text-lg" : "text-amber-400 font-bold"}>{selectedRunId || 'NONE'}</div>
-          </div>
-          <div className={`px-2 py-1 rounded ${gridSlots.length > 0 ? "bg-emerald-950 border border-emerald-500/50" : "bg-slate-900"}`}>
-            <div className="text-[9px] text-slate-500 uppercase">Grid Slots</div>
-            <div className={gridSlots.length > 0 ? "text-emerald-400 font-bold text-lg" : "text-slate-500 font-bold"}>{gridSlots.length}</div>
-          </div>
-          <div className="bg-slate-900 px-2 py-1 rounded">
-            <div className="text-[9px] text-slate-500 uppercase">Success</div>
-            <div className="text-slate-300 font-bold">{successRuns.length}</div>
-          </div>
-          <div className="bg-slate-900 px-2 py-1 rounded">
-            <div className="text-[9px] text-slate-500 uppercase">Batch</div>
-            <div className="text-slate-300 font-bold">{selectedBatchId || 'all'}</div>
-          </div>
-        </div>
-        
-        {/* RAW NETWORK STATUS */}
-        {lastApiCall && (
-          <div className={`mt-2 p-2 rounded border text-[10px] ${lastApiCall.count > 0 ? 'bg-emerald-950/50 border-emerald-500/30 text-emerald-400' : 'bg-red-950/50 border-red-500/30 text-red-400'}`}>
-            <div className="font-bold mb-1">🌐 LAST API CALL:</div>
-            <div>URL: {lastApiCall.url}</div>
-            <div>Status: {lastApiCall.status}</div>
-            <div>Slots: {lastApiCall.count}</div>
-            <div className="truncate">Raw: {lastApiCall.rawResponse}...</div>
-          </div>
-        )}
-        
-        {genIssues && genIssues.length > 0 && (
-          <div className="mt-2 p-2 bg-red-950/50 border border-red-500/30 rounded text-red-400 text-[10px]">
-            ⚠️ {genIssues.map(i => `${i.batch}: ${i.reason}`).join(' | ')}
-          </div>
-        )}
-        {genDiag && (
-          <div className="mt-2 p-2 bg-amber-950/50 border border-amber-500/30 rounded text-amber-400 text-[10px]">
-            ℹ️ {genDiag}
-          </div>
-        )}
-      </div>
+    <div className="flex flex-col h-[calc(100vh-5rem)] relative overflow-hidden bg-[#0c0e12] font-inter text-slate-200">
+      <AnimatedBackground />
 
       {/* Top Main Area */}
-      <div className="flex flex-1 gap-4 overflow-hidden p-3 pb-0">
+      <div className="flex flex-1 gap-6 p-6 z-10 overflow-hidden backdrop-blur-sm">
         
         {/* ═══ LEFT SIDEBAR (Controls & Tabs) ═══ */}
-        <div className="w-[300px] flex flex-col gap-3 shrink-0 h-full">
+        <div className="w-[320px] flex flex-col gap-4 shrink-0 h-full">
           
           {/* Controls Panel (One Card) */}
-          <div className="bg-slate-800 rounded-lg border border-slate-700/80 flex flex-col shrink-0 shadow-sm relative overflow-visible">
+          <div className="bg-[#111318]/60 border border-white/5 backdrop-blur-xl rounded-2xl flex flex-col shrink-0 shadow-2xl overflow-visible">
             {/* Dept and Batch Row */}
-            <div className="p-3 border-b border-slate-700/50 flex gap-3 z-10">
+            <div className="p-4 border-b border-white/5 flex gap-3 z-10">
               <div className="flex-1 min-w-0">
-                <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1 tracking-wider">Department</label>
+                <label className="block text-[10px] items-center gap-1.5 uppercase font-bold text-[#8ff5ff] mb-1.5 flex tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#primary]" /> Dept
+                </label>
                 <select
                   value={selectedDeptName}
                   onChange={e => setSelectedDeptName(e.target.value)}
-                  className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700/50 rounded text-slate-200 text-xs focus:ring-1 focus:ring-indigo-500/50 outline-none truncate"
+                  className="w-full px-3 py-2 bg-[#0c0e12]/80 border border-white/10 rounded-lg text-slate-200 text-xs focus:ring-1 focus:ring-[#8ff5ff]/50 hover:bg-[#171a1f] outline-none truncate transition-all shadow-inner"
                 >
                   {deptList.length === 0 ? <option value="">No depts</option> : deptList.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
                 </select>
               </div>
               <div className="flex-1 min-w-0">
-                <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1 tracking-wider">Batch Filter</label>
+                <label className="block text-[10px] items-center gap-1.5 uppercase font-bold text-[#8ff5ff] mb-1.5 flex tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#c180ff]" /> Batch
+                </label>
                 <select
                   value={selectedBatchId ?? ""}
                   onChange={e => setSelectedBatchId(e.target.value ? Number(e.target.value) : null)}
-                  className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700/50 rounded text-slate-200 text-xs focus:ring-1 focus:ring-indigo-500/50 outline-none truncate"
+                  className="w-full px-3 py-2 bg-[#0c0e12]/80 border border-white/10 rounded-lg text-slate-200 text-xs focus:ring-1 focus:ring-[#8ff5ff]/50 hover:bg-[#171a1f] outline-none truncate transition-all shadow-inner"
                 >
                   <option value="">All Batches</option>
                   {buildBatchTree.length > 0 ? renderBatchOptions(buildBatchTree) : state?.batches.map(b => (
@@ -1329,590 +1355,266 @@ export default function SchedulerPage() {
               </div>
             </div>
 
-            {/* Collapsible Batch Structure */}
-            {buildBatchTree.length > 0 && (
-              <div className="border-b border-slate-700/50">
-                 <button onClick={() => setBatchStructureOpen(!batchStructureOpen)}
-                  className="w-full px-3 py-2 flex items-center justify-between text-[11px] font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-700/30 transition-colors">
-                  <span className="flex items-center gap-1.5"><span className="text-slate-500">❖</span> Batch Structure</span>
-                  <span className={`transform transition-transform ${batchStructureOpen ? "rotate-180" : ""}`}>▾</span>
-                 </button>
-                 {batchStructureOpen && (
-                   <div className="px-3 pb-3 space-y-1 bg-slate-900/30 pt-1 shadow-inner relative z-0 max-h-48 overflow-y-auto custom-scrollbar">
-                      {buildBatchTree.map(parent => (
-                        <div key={parent.id} className="py-0.5">
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_5px_rgba(99,102,241,0.5)]"></div>
-                            <span className="text-slate-300 font-bold truncate">{parent.name}</span>
-                            <span className="text-slate-500 ml-auto bg-slate-800 px-1 py-0.5 rounded text-[9px]">{parent.size}</span>
-                          </div>
-                          {parent.children && parent.children.length > 0 && (
-                            <div className="ml-3 mt-1 space-y-1 border-l border-slate-700/50 pl-2">
-                              {parent.children.map(child => (
-                                <div key={child.id} className="flex items-center gap-1.5 text-[10px]">
-                                  <div className="w-1 h-1 rounded-full bg-purple-500"></div>
-                                  <span className="text-slate-400 font-medium truncate">{child.name}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      <div className="pt-2 mt-2 border-t border-slate-700/30 flex justify-end">
-                        <button onClick={() => setHierarchyModalOpen(true)} className="text-[10px] text-indigo-400 font-medium hover:text-indigo-300 transition-colors">Visual map</button>
-                      </div>
-                   </div>
-                 )}
-              </div>
-            )}
-
-            {/* Collapsible Pinned Slots */}
+            {/* Collapsible Pins */}
             <div>
               <button onClick={() => setPinsOpen(!pinsOpen)}
-                className="w-full px-3 py-2 flex items-center justify-between text-[11px] font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-700/30 transition-colors rounded-b-lg">
-                <span className="flex items-center gap-1.5"><span className="text-slate-500">📌</span> Pinned Slots ({state?.pinned_slots.length || 0})</span>
+                className="w-full px-4 py-3 flex items-center justify-between text-xs font-bold text-[#aaabb0] hover:text-[#f6f6fc] hover:bg-white/5 transition-colors rounded-b-2xl">
+                <span className="flex items-center gap-2"><span className="text-lg">📌</span> Pinned Slots ({state?.pinned_slots.length || 0})</span>
                 <span className={`transform transition-transform ${pinsOpen ? "rotate-180" : ""}`}>▾</span>
               </button>
               {pinsOpen && (
-                <div className="px-3 pb-3 bg-slate-900/30 pt-1 border-t border-slate-700/30 shadow-inner rounded-b-lg">
-                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+                <div className="px-4 pb-4 bg-black/20 pt-2 border-t border-white/5 shadow-inner rounded-b-2xl">
+                  {/* Pin Content - Simple version to save space */}
+                  <div className="space-y-2 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
                     {state?.pinned_slots.map(p => (
-                      <div key={p.id} className="flex items-center justify-between bg-slate-800 rounded p-1.5 text-[10px] border border-slate-700/50 hover:border-slate-600 transition-colors">
-                        <span className="text-slate-300 truncate w-3/4 flex items-center gap-1">
-                          <span className="font-bold text-slate-200 truncate">{p.subject_name}</span>
-                          <span className="text-slate-500 shrink-0">• {DAY_SHORT[p.day]} S{p.slot_index}</span>
-                        </span>
-                        <button onClick={() => handleDeletePin(p.id)} className="text-red-400 bg-red-500/10 hover:bg-red-500/20 hover:text-red-300 w-5 h-5 rounded flex items-center justify-center transition-colors">✕</button>
+                      <div key={p.id} className="flex justify-between bg-[#171a1f] rounded-lg p-2 text-[10px] border border-white/5 hover:border-white/10">
+                        <span className="truncate w-3/4"><span className="font-bold">{p.subject_name}</span> <span className="text-[#aaabb0]">• {DAY_SHORT[p.day]} S{p.slot_index}</span></span>
+                        <button onClick={() => handleDeletePin(p.id)} className="text-[#ff716c] hover:bg-[#ff716c]/20 w-5 h-5 rounded transition-colors">✕</button>
                       </div>
                     ))}
-                  </div>
-                  <div className="mt-2 space-y-1.5 pt-2 border-t border-slate-700/50">
-                    <select value={newPinSubject} onChange={e => setNewPinSubject(e.target.value ? Number(e.target.value) : "")}
-                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-[10px] text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500/50">
-                      <option value="">Select subject</option>
-                      {state?.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                    <div className="flex gap-1.5">
-                      <select value={newPinDay} onChange={e => setNewPinDay(e.target.value)}
-                        className="flex-1 w-1/2 px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-[10px] text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500/50">
-                        {DAYS.map(d => <option key={d} value={d}>{DAY_SHORT[d]}</option>)}
-                      </select>
-                      <select value={newPinSlot} onChange={e => setNewPinSlot(Number(e.target.value))}
-                        className="flex-1 w-1/2 px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-[10px] text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500/50">
-                        {AVAILABLE_SLOTS.map(s => {
-                          // Disable Wednesday elective slots
-                          const isWedElective = newPinDay === "WEDNESDAY" && WEDNESDAY_ELECTIVE_SLOTS.includes(s.index);
-                          return (
-                            <option key={s.index} value={s.index} disabled={isWedElective}>
-                              {s.label} {isWedElective ? "(Elective)" : ""}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-                    <button onClick={handleAddPin} disabled={!newPinSubject}
-                      className="w-full py-1.5 bg-indigo-600/80 text-white rounded text-[10px] font-bold hover:bg-indigo-600 disabled:opacity-40 transition-colors shadow-sm">
-                      + Add Pin
-                    </button>
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Subjects/Faculty/Unav Tabs Card */}
-          <div className="bg-slate-800 rounded-lg border border-slate-700/80 flex flex-col flex-1 overflow-hidden min-h-0 shadow-sm relative">
-            <div className="flex border-b border-slate-700/80 bg-slate-900/50 shrink-0">
+          {/* Subjects/Faculty Tabs Card */}
+          <div className="bg-[#111318]/60 border border-white/5 backdrop-blur-xl rounded-2xl flex flex-col flex-1 overflow-hidden shadow-2xl relative">
+            <div className="flex border-b border-white/5 bg-[#0c0e12]/40 shrink-0">
               {(["subjects", "faculty", "unavailability"] as Tab[]).map(t => (
                 <button key={t} onClick={() => setTab(t)}
-                  className={`flex-1 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
-                    tab === t ? "text-indigo-400 border-indigo-500 bg-slate-800" : "text-slate-500 border-transparent hover:text-slate-300 hover:bg-slate-800/50"
+                  className={`flex-1 px-2 py-3 text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                    tab === t ? "text-[#8ff5ff] bg-white/5 shadow-[inset_0_-2px_0_#8ff5ff]" : "text-[#aaabb0] hover:text-[#f6f6fc] hover:bg-white/5"
                   }`}>
                   {t === "unavailability" ? "Unavail." : t}
                 </button>
               ))}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar relative">
+            <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar relative">
               {tab === "subjects" && (
                 unassignedSubjects.length ? unassignedSubjects.map(s => (
-                  <div key={s.id} 
+                  <motion.div key={s.id} 
                     draggable={true}
-                    onDragStart={(e) => handleSubjectDragStart(e, s)}
+                    onDragStart={(e: any) => handleSubjectDragStart(e, s)}
                     onDragEnd={handleDragEnd}
-                    className="bg-slate-900/40 rounded px-2.5 py-2 border border-slate-700/50 cursor-grab hover:bg-slate-700/40 hover:border-indigo-500/30 transition-all flex items-center gap-1.5 shadow-sm group h-9"
+                    whileHover={{ scale: 1.02 }}
+                    className="bg-[#171a1f]/80 rounded-xl px-3 py-2.5 border border-white/5 cursor-grab active:cursor-grabbing hover:bg-[#23262c] hover:border-[#8ff5ff]/30 transition-all flex flex-col gap-1 shadow-md group relative overflow-hidden"
                   >
-                    <span className="text-xs font-bold text-slate-200 truncate flex-1 group-hover:text-indigo-300 transition-colors min-w-0" title={s.name}>{s.name}</span>
-                    <span className="flex gap-1 shrink-0">
-                      {s.batch_name && <span className="text-[9px] px-1.5 py-0.5 bg-indigo-500/10 text-indigo-300 rounded whitespace-nowrap border border-indigo-500/20 font-medium truncate max-w-16" title={s.batch_name}>{s.batch_name}</span>}
-                      {s.teacher_name && <span className="text-[9px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-300 rounded whitespace-nowrap border border-emerald-500/20 font-medium truncate max-w-16" title={s.teacher_name}>{s.teacher_name}</span>}
-                      <span className="text-[9px] text-amber-500 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded whitespace-nowrap border border-amber-500/20 shrink-0">
-                        {s.credits - gridSlots.filter(g => g.subject_id === s.id).length}l
-                      </span>
-                    </span>
-                  </div>
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                    <div className="flex items-center justify-between">
+                       <span className="text-xs font-bold text-[#f6f6fc] truncate group-hover:text-[#8ff5ff] transition-colors">{s.name}</span>
+                       <span className="text-[9px] text-amber-300 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded-full border border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+                         {s.credits - gridSlots.filter(g => g.subject_id === s.id).length} Req
+                       </span>
+                    </div>
+                    <div className="flex gap-2">
+                      {s.batch_name && <span className="text-[9px] text-[#c180ff] font-medium truncate">{s.batch_name}</span>}
+                      {s.teacher_name && <span className="text-[9px] text-[#aaabb0] font-medium truncate">• {s.teacher_name}</span>}
+                    </div>
+                  </motion.div>
                 )) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-emerald-400/80 p-4">
-                    <span className="text-3xl mb-2 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)] block">✨</span>
-                    <p className="text-xs font-bold uppercase tracking-widest text-emerald-500/70">All Allocated</p>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-[#9bffce]/80 p-4">
+                    <motion.span animate={{ scale: [1,1.1,1] }} transition={{ repeat: Infinity, duration: 2 }} className="text-3xl mb-2 drop-shadow-[0_0_15px_rgba(155,255,206,0.5)]">✨</motion.span>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#9bffce]">All Allocated</p>
                   </div>
                 )
               )}
 
               {tab === "faculty" && (
-                state?.teachers.length ? state.teachers.map(t => (
-                  <div key={t.id} className="bg-slate-900/40 rounded px-2.5 py-2 border border-slate-700/50 flex flex-col gap-1 truncate hover:border-slate-600 transition-colors">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-200 truncate">{t.name}</span>
-                      <span className="text-[9px] px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-400 font-medium">Max: {t.max_classes_per_day}</span>
-                    </div>
-                    <span className="text-[9px] text-slate-500 font-medium truncate">{t.email || "No email"}</span>
+                filteredFaculty.length ? filteredFaculty.map(t => (
+                  <div key={t.id} className="bg-[#171a1f]/80 rounded-xl px-3 py-2.5 border border-white/5 flex justify-between items-center hover:border-white/10 transition-colors shadow-sm">
+                     <span className="text-xs font-bold text-[#f6f6fc] truncate">{t.name}</span>
+                     <span className="text-[9px] px-1.5 py-0.5 bg-white/5 border border-white/10 rounded-full text-[#aaabb0] font-medium">Max {t.max_classes_per_day}</span>
                   </div>
-                )) : <p className="text-xs text-slate-500 text-center py-8">No faculty found</p>
-              )}
-
-              {tab === "unavailability" && (
-                <div className="flex flex-col h-full relative">
-                  <div className="flex-1 space-y-1.5">
-                    {state?.unavailabilities.length ? state.unavailabilities.map(u => (
-                      <div key={u.id} className="bg-slate-900/40 rounded px-2.5 py-2 border border-slate-700/50 flex items-center justify-between hover:border-slate-600 transition-colors">
-                        <div className="flex flex-col">
-                          <span className="text-[11px] font-bold text-slate-200">{u.teacher_name}</span>
-                          <span className="text-[9px] text-slate-500 font-medium">{DAY_SHORT[u.day]} • S{u.slot_index}</span>
-                        </div>
-                        <button onClick={() => handleDeleteUnav(u.id)} className="text-red-400 bg-red-500/10 hover:bg-red-500/20 hover:text-red-300 w-6 h-6 rounded flex items-center justify-center transition-colors">✕</button>
-                      </div>
-                    )) : <p className="text-[10px] text-slate-500 text-center py-8 uppercase tracking-wider font-bold">No unavailabilities</p>}
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-slate-700/50 space-y-1.5 shrink-0 bg-slate-800 z-10 sticky bottom-0">
-                    <select value={newUnavTeacher} onChange={e => setNewUnavTeacher(e.target.value ? Number(e.target.value) : "")}
-                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-[10px] text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500/50">
-                      <option value="">Teacher</option>
-                      {state?.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                    <div className="flex gap-1.5">
-                      <select value={newUnavDay} onChange={e => setNewUnavDay(e.target.value)}
-                        className="flex-1 w-1/2 px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-[10px] text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500/50">
-                        {DAYS.map(d => <option key={d} value={d}>{DAY_SHORT[d]}</option>)}
-                      </select>
-                      <select value={newUnavSlot} onChange={e => setNewUnavSlot(Number(e.target.value))}
-                        className="flex-1 w-1/2 px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-[10px] text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500/50">
-                        {AVAILABLE_SLOTS.map(s => {
-                          // Disable Wednesday elective slots
-                          const isWedElective = newUnavDay === "WEDNESDAY" && WEDNESDAY_ELECTIVE_SLOTS.includes(s.index);
-                          return (
-                            <option key={s.index} value={s.index} disabled={isWedElective}>
-                              {s.label} {isWedElective ? "(Elective)" : ""}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-                    <button onClick={handleAddUnav} disabled={!newUnavTeacher}
-                      className="w-full py-1.5 bg-indigo-600/80 text-white rounded text-[10px] font-bold hover:bg-indigo-600 disabled:opacity-40 transition-colors shadow-sm">
-                      Add
-                    </button>
-                  </div>
-                </div>
+                )) : <p className="text-xs text-[#aaabb0] text-center py-8">No faculty found</p>
               )}
             </div>
           </div>
-
-          {genDiag && <div className="p-2 border border-amber-500/30 bg-amber-500/10 rounded text-[10px] text-amber-300 leading-tight font-medium shadow-sm">{genDiag}</div>}
-          {/* DEBUG: Error state - should only show API errors, not validation errors */}
-          {error && (
-            <div className="p-2 border border-red-500/30 bg-red-500/10 rounded text-[10px] text-red-300 leading-tight font-medium shadow-sm">
-              <div className="font-bold mb-1">[DEBUG] API Error (not validation):</div>
-              {error}
-            </div>
-          )}
         </div>
 
         {/* ═══ CENTER MAIN FOCUS (Timetable Grid) ═══ */}
-        <div className="flex-1 flex flex-col w-[70%] min-w-0 bg-slate-800 rounded-lg border border-slate-700/80 shadow-md overflow-hidden relative">
-          <div className="px-4 py-2 border-b border-slate-700/80 bg-slate-900/60 flex items-center justify-between shrink-0 h-[46px]">
-            <div className="flex items-center gap-3">
-              <h2 className="font-bold text-slate-200 text-[13px] tracking-widest uppercase">
-                Timetable Grid
-                {selectedRunId && <span className="text-indigo-400 font-bold ml-2 bg-indigo-500/10 px-1.5 py-0.5 rounded text-[10px] tracking-normal">RUN #{selectedRunId}</span>}
+        <div className="flex-1 flex flex-col min-w-0 bg-[#0c0e12]/60 rounded-[2rem] border border-white/5 shadow-2xl overflow-hidden relative backdrop-blur-2xl">
+          
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-white/5 bg-[#171a1f]/40 flex items-center justify-between shrink-0 h-[60px] backdrop-blur-md">
+            <div className="flex items-center gap-4">
+              <h2 className="font-space-grotesk font-bold text-[#f6f6fc] text-[14px] tracking-widest uppercase flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#8ff5ff] shadow-[0_0_10px_#8ff5ff]"></span>
+                Ethereal Grid
+                {selectedRunId && <span className="text-[#c180ff] font-bold ml-2 bg-[#c180ff]/10 border border-[#c180ff]/20 px-2 py-0.5 rounded-full text-[10px] tracking-normal shadow-[0_0_10px_rgba(193,128,255,0.2)]">V{selectedRunId}</span>}
               </h2>
               {dragState.slot && (
-                <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 uppercase tracking-wider animate-pulse">
+                <motion.span initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="text-[10px] font-bold text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20 uppercase tracking-widest shadow-[0_0_10px_rgba(245,158,11,0.2)]">
                   Moving {dragState.slot.subject}
-                </span>
+                </motion.span>
               )}
             </div>
-            {gridLoading && <span className="text-[10px] text-indigo-400 font-bold animate-pulse tracking-widest uppercase bg-indigo-500/10 px-2 py-0.5 rounded">Syncing</span>}
+            {gridLoading && <span className="text-[10px] text-[#8ff5ff] font-bold animate-pulse tracking-widest uppercase">Syncing...</span>}
           </div>
-
-          {/* DEBUG INFO - Always visible during debugging */}
-          <div className="p-2 bg-slate-900/50 border-b border-slate-700/50 text-[9px] font-mono text-slate-500">
-            <div>DEBUG: genIssues={genIssues?.length || 0}, runs={runs.length}, selectedBatch={selectedBatchId || 'null'}</div>
-          </div>
-
-          {/* Generation Issues Panel */}
-          {genIssues && genIssues.length > 0 && (
-            <div className="p-4 bg-red-950/30 border-b border-red-500/30">
-              <div className="flex items-start gap-3">
-                <span className="text-xl">⚠️</span>
-                <div className="flex-1">
-                  <h3 className="text-[12px] font-bold text-red-400 uppercase tracking-wider mb-2">Impossible Schedule Detected</h3>
-                  <div className="space-y-2">
-                    {genIssues.map((issue, idx) => {
-                      // STRICT GUARD: Only render errors for selected batch
-                      // DEBUG: Log what we're rendering
-                      console.log(`[RENDER ERROR] Issue batch_id: ${issue.batch_id}, Selected: ${selectedBatchId}, Batch name: ${issue.batch}`);
-                      
-                      // If we have a batch_id in the issue and it doesn't match selected, skip
-                      if (issue.batch_id && selectedBatchId && issue.batch_id !== selectedBatchId) {
-                        console.warn(`[RENDER ERROR] SKIPPING - batch_id mismatch!`);
-                        return null;
-                      }
-                      
-                      // If no batch_id but batch name doesn't match selected batch name, skip
-                      if (!issue.batch_id && selectedBatchId && state?.batches) {
-                        const selectedBatch = state.batches.find(b => b.id === selectedBatchId);
-                        if (selectedBatch && issue.batch !== selectedBatch.name && issue.batch !== "System" && issue.batch !== "Solver AI") {
-                          console.warn(`[RENDER ERROR] SKIPPING - batch name mismatch! Issue: ${issue.batch}, Selected: ${selectedBatch.name}`);
-                          return null;
-                        }
-                      }
-                      
-                      return (
-                        <div key={idx} className="bg-red-900/20 rounded p-2 border border-red-500/20">
-                          <div className="flex items-center gap-2 text-[11px]">
-                            <span className="font-bold text-slate-200">{issue.batch}</span>
-                            <span className="text-slate-500">|</span>
-                            <span className="text-amber-400">Req: {issue.required}</span>
-                            <span className="text-emerald-400">Avail: {issue.available}</span>
-                          </div>
-                          <p className="text-[10px] text-slate-400 mt-1">{issue.reason}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-2 italic">Try reducing subjects or increasing available slots.</p>
-                </div>
-                <button onClick={() => setGenIssues(null)} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
-              </div>
-            </div>
-          )}
 
           {!selectedRunId ? (
-            <div className="flex-1 flex items-center justify-center bg-slate-900/30 relative">
-               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/10 via-slate-900/20 to-transparent"></div>
-              <button onClick={handleGenerate} disabled={generating || !selectedDeptName} 
-                className="group z-10 flex flex-col items-center gap-4 p-8 rounded-2xl cursor-pointer hover:bg-indigo-500/5 transition-all text-center">
-                <div className="w-20 h-20 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 group-hover:scale-110 group-hover:bg-indigo-500/20 group-hover:border-indigo-500/30 group-hover:shadow-[0_0_30px_rgba(99,102,241,0.2)] transition-all duration-500 relative">
-                  {generating ? (
-                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }} className="w-8 h-8 border-[3px] border-indigo-500 border-t-transparent rounded-full shadow-[0_0_15px_rgba(99,102,241,0.5)]"/>
-                  ) : (
-                    <span className="text-3xl plugin-icon opacity-80 group-hover:opacity-100 transition-opacity">⚡</span>
-                  )}
-                  <div className="absolute inset-0 rounded-full bg-indigo-500/5 filter blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                </div>
-                <div>
-                  <p className="text-slate-200 font-bold text-[14px] group-hover:text-indigo-300 transition-colors uppercase tracking-widest">
-                    {generating ? generationStep || "Synthesizing..." : "[ Generate Schedule ]"}
-                  </p>
-                  <p className="text-slate-500 text-[11px] font-medium mt-1.5 group-hover:text-slate-400 max-w-[200px] leading-relaxed transition-colors">Invoke AI constraint solver to create collision-free schedules automatically</p>
-                </div>
-              </button>
+            <div className="flex-1 flex flex-col items-center justify-center relative">
+               <motion.button 
+                 onClick={handleGenerate}
+                 disabled={generating || !selectedDeptName}
+                 whileHover={{ scale: 1.05 }}
+                 whileTap={{ scale: 0.95 }}
+                 className="relative group p-8 rounded-3xl z-20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+               >
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#9c48ea]/30 to-[#00deec]/30 rounded-[3rem] blur-2xl group-hover:blur-3xl transition-all duration-500" />
+                  <div className="relative bg-[#111318]/90 border border-white/10 backdrop-blur-3xl rounded-[2.5rem] p-12 flex flex-col items-center shadow-2xl overflow-hidden">
+                     <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+                     {generating ? (
+                        <div className="flex flex-col items-center gap-6">
+                           <motion.div 
+                             animate={{ rotate: 360 }} 
+                             transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                             className="w-16 h-16 border-4 border-[#8ff5ff] border-t-transparent rounded-full drop-shadow-[0_0_15px_rgba(143,245,255,1)]"
+                           />
+                           <motion.div 
+                             initial={{ opacity: 0, y: 10 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             key={generationStep}
+                             className="font-space-grotesk font-bold text-xl text-[#8ff5ff] uppercase tracking-widest drop-shadow-[0_0_10px_rgba(143,245,255,0.5)]"
+                           >
+                              {generationStep || "Validating..."}
+                           </motion.div>
+                        </div>
+                     ) : (
+                        <div className="flex flex-col items-center gap-4">
+                           <motion.span 
+                             animate={{ scale: [1, 1.1, 1] }} 
+                             transition={{ duration: 2, repeat: Infinity }}
+                             className="text-6xl drop-shadow-[0_0_20px_rgba(143,245,255,0.8)]"
+                           >
+                             ⚡
+                           </motion.span>
+                           <span className="font-space-grotesk text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#8ff5ff] to-[#c180ff] tracking-wide shrink-0 whitespace-nowrap px-4 py-2">
+                              Generate a Smart Schedule
+                           </span>
+                        </div>
+                     )}
+                  </div>
+               </motion.button>
             </div>
           ) : (
-            <div className="flex-1 overflow-auto custom-scrollbar bg-slate-950/20">
-              <table className="w-full h-full min-w-[700px] border-collapse relative">
-                <thead>
-                  <tr>
-                    <th className="w-16 sticky top-0 bg-slate-800/95 backdrop-blur z-20 border-b border-r border-slate-700/80 shadow-[0_2px_10px_-3px_rgba(0,0,0,0.3)]"></th>
-                    {DAYS.map((d, i) => (
-                      <th key={d} className={`p-2.5 sticky top-0 bg-slate-800/95 backdrop-blur z-20 border-b border-r border-slate-700/80 last:border-r-0 text-center shadow-[0_2px_10px_-3px_rgba(0,0,0,0.3)]`}>
-                        <span className="text-[11px] font-bold text-slate-300 uppercase tracking-widest">{DAY_SHORT[d]}</span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
+            <div className="flex-1 overflow-auto custom-scrollbar p-6">
+               <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr] gap-3 h-full pb-8">
+                  {/* Headers */}
+                  <div />
+                  {DAYS.map(d => (
+                     <div key={d} className="flex justify-center items-end pb-3 text-[11px] font-space-grotesk font-bold text-[#aaabb0] uppercase tracking-widest border-b border-light/5">
+                        {DAY_SHORT[d]}
+                     </div>
+                  ))}
+                  
+                  {/* Rows */}
                   {TIME_SLOTS.map(ts => {
-                    // Check if this is a break slot
-                    const isBreak = ts.is_break;
-                    // Check if this is Wednesday elective slot
-                    const isWednesdayElective = (day: string) => day === "WEDNESDAY" && WEDNESDAY_ELECTIVE_SLOTS.includes(ts.index);
-                    
-                    return (
-                    <tr key={ts.index} className={isBreak ? "bg-slate-900/30" : ""}>
-                      <td className={`p-2 border-b border-r border-slate-700/60 align-middle text-center w-20 relative transition-colors ${isBreak ? "bg-slate-800/30" : "bg-slate-800/60 hover:bg-slate-800"}`}>
-                        {isBreak ? (
-                          <span className="text-[9px] font-bold text-amber-500/70 tracking-wider bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 block">BREAK</span>
-                        ) : (
-                          <span className="text-[10px] font-bold text-slate-400 tracking-wider bg-slate-900/50 px-1.5 py-0.5 rounded border border-slate-700/50 block shadow-inner">{ts.label.replace(" – ", "-")}</span>
-                        )}
-                      </td>
-                      {DAYS.map(day => {
-                        const entries = getCell(day, ts.index);
-                        // DEBUG: Log cells that should have content
-                        if (gridSlots.length > 0 && ts.index === 0 && day === "MONDAY") {
-                          console.log(`🎨 Rendering cell ${day}-${ts.index}:`, entries.length, "entries", entries);
-                        }
-                        const isDragOver = draggedOverCell?.day === day && draggedOverCell?.slotIndex === ts.index;
-                        const isWedElective = isWednesdayElective(day);
-                        let cellBgClasses = "transition-all duration-200 ";
-                        
-                        if (isBreak) {
-                          cellBgClasses = "bg-slate-900/20 ";
-                        } else if (isWedElective) {
-                          cellBgClasses = "bg-emerald-500/5 ring-1 ring-inset ring-emerald-500/20 ";
-                        } else if (isDragOver) {
-                           cellBgClasses = draggedOverCell?.valid ? "bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/50 " : "bg-red-500/10 ring-1 ring-inset ring-red-500/50 ";
-                        } else {
-                           cellBgClasses += "hover:bg-slate-700/20 ";
-                        }
-                        
-                        return (
-                          <td 
-                            key={`${day}-${ts.index}`} 
-                            className={`p-1.5 border-b border-r border-slate-700/50 last:border-r-0 align-top h-[110px] relative w-[18%] ${cellBgClasses}`}
-                            onDragOver={(e) => !isBreak && !isWedElective && handleDragOver(e, day, ts.index)}
-                            onDragLeave={handleDragLeave}
-                            onDrop={(e) => !isBreak && !isWedElective && handleDrop(e, day, ts.index)}
-                          >
-                            {/* Break indicator */}
-                            {isBreak && (
-                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <span className="text-[10px] font-bold text-slate-600 tracking-widest uppercase">Break</span>
-                              </div>
-                            )}
-                            {/* Wednesday Elective indicator */}
-                            {isWedElective && (
-                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <span className="text-[9px] font-bold text-emerald-500/60 tracking-widest uppercase text-center">Elective<br/>Locked</span>
-                              </div>
-                            )}
-                                {/* FORCED VISIBLE SLOT RENDER */}
-                            {entries.length > 0 && (
-                              <div style={{
-                                position: "absolute",
-                                top: 2,
-                                left: 2,
-                                right: 2,
-                                bottom: 2,
-                                background: "#ef4444",  // Red background - CANNOT MISS
-                                border: "2px solid white",
-                                borderRadius: "4px",
-                                padding: "4px",
-                                zIndex: 9999,
-                                overflow: "auto"
-                              }}>
-                                {entries.map((e) => (
-                                  <div key={e.id} style={{
-                                    background: "white",
-                                    color: "black",
-                                    padding: "2px 4px",
-                                    marginBottom: "2px",
-                                    borderRadius: "2px",
-                                    fontSize: "10px",
-                                    fontWeight: "bold"
-                                  }}>
-                                    {e.subject || "NO SUB"} | {e.teacher || "NO TCHR"}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            
-                            {/* Show count even if 0 */}
-                            <div style={{
-                              position: "absolute",
-                              top: 0,
-                              right: 0,
-                              background: entries.length > 0 ? "#22c55e" : "#ef4444",
-                              color: "white",
-                              fontSize: "9px",
-                              padding: "1px 3px",
-                              borderRadius: "2px",
-                              zIndex: 10000
-                            }}>
-                              {entries.length}
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                    );
+                     const isBreak = ts.is_break;
+                     const isWednesdayElective = (day: string) => day === "WEDNESDAY" && WEDNESDAY_ELECTIVE_SLOTS.includes(ts.index);
+                     
+                     return (
+                        <React.Fragment key={ts.index}>
+                           <div className="flex flex-col items-center justify-center pt-2">
+                              <span className="text-[10px] font-medium text-[#aaabb0] bg-white/5 px-2 py-1 rounded-full border border-white/5">{ts.start_time}</span>
+                           </div>
+                           {DAYS.map(day => {
+                              const entries = getCell(day, ts.index);
+                              const isDragOver = draggedOverCell?.day === day && draggedOverCell?.slotIndex === ts.index;
+                              const isWedElective = isWednesdayElective(day);
+                              
+                              let cellClasses = "relative rounded-[1.25rem] p-2 transition-all duration-300 flex flex-col gap-2 min-h-[100px] border border-transparent ";
+                              if (isBreak) cellClasses += "bg-[#111318]/40 border-white/5 opacity-50 ";
+                              else if (isWedElective) cellClasses += "bg-[#005a3c]/10 border-[#006443]/30 ";
+                              else if (isDragOver) cellClasses += draggedOverCell?.valid ? "bg-[#69f6b8]/20 border-[#69f6b8]/50 shadow-[0_0_20px_rgba(105,246,184,0.2)] " : "bg-[#ff716c]/20 border-[#ff716c]/50 ";
+                              else cellClasses += "bg-[#171a1f]/60 hover:bg-[#23262c]/80 hover:border-white/10 hover:shadow-xl ";
+                              
+                              return (
+                                 <div 
+                                    key={`${day}-${ts.index}`}
+                                    className={cellClasses}
+                                    onDragOver={(e: any) => !isBreak && !isWedElective && handleDragOver(e, day, ts.index)}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={(e: any) => !isBreak && !isWedElective && handleDrop(e, day, ts.index)}
+                                 >
+                                    {isBreak && <div className="absolute inset-0 flex items-center justify-center font-bold text-[10px] text-[#aaabb0] tracking-[0.2em] uppercase mix-blend-overlay">Break</div>}
+                                    {isWedElective && <div className="absolute inset-0 flex items-center justify-center font-bold text-[9px] text-[#58e7ab] tracking-widest uppercase text-center opacity-40">Elective<br/>Locked</div>}
+                                    
+                                    <AnimatePresence>
+                                       {entries.map(e => (
+                                          <motion.div 
+                                             layoutId={String(`slot-${e.id}`)}
+                                             initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                             animate={{ opacity: 1, scale: 1, y: 0 }}
+                                             exit={{ opacity: 0, scale: 0.9 }}
+                                             whileHover={{ scale: 1.04, y: -2 }}
+                                             className={`relative flex flex-col p-3 rounded-xl border backdrop-blur-2xl cursor-grab active:cursor-grabbing overflow-hidden ${getTeacherColorClass(e.teacher_id)}`}
+                                             draggable
+                                             onDragStart={(evt: any) => handleDragStart(evt, e, day, ts.index)}
+                                             key={e.id}
+                                          >
+                                             <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
+                                             <span className="font-space-grotesk font-bold text-xs truncate z-10 leading-tight">{e.subject}</span>
+                                             <span className="text-[10px] opacity-80 mt-1 truncate z-10">{e.teacher}</span>
+                                             <span className="text-[9px] uppercase tracking-widest opacity-60 mt-2 z-10 font-bold bg-black/20 self-start px-2 py-0.5 rounded-full">{e.batch}</span>
+                                          </motion.div>
+                                       ))}
+                                    </AnimatePresence>
+                                 </div>
+                              );
+                           })}
+                        </React.Fragment>
+                     );
                   })}
-                </tbody>
-              </table>
+               </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* ═══ BOTTOM BAR (Inline Footer) ═══ */}
-      <div className="shrink-0 p-3 pt-2 w-full z-10 sticky bottom-0">
-        <div className="bg-slate-800 rounded-lg border border-slate-700/80 shadow-[0_-4px_20px_rgba(0,0,0,0.2)] p-2.5 flex items-center justify-between gap-4">
           
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-             {/* Generate Actions */}
-             <div className="flex items-center gap-2 shrink-0">
-                <button onClick={handleGenerate} disabled={generating || !selectedDeptName}
-                  className="px-6 py-2 bg-indigo-600 text-white rounded font-bold text-xs uppercase tracking-wider hover:bg-indigo-500 disabled:opacity-50 transition-all shadow-[0_2px_10px_rgba(79,70,229,0.2)] hover:shadow-[0_4px_15px_rgba(79,70,229,0.3)] whitespace-nowrap group">
-                  {generating ? "Synthesizing..." : (
-                    <span className="flex items-center gap-1.5"><span className="text-sm opacity-80 group-hover:scale-110 transition-transform">✨</span> Generate</span>
-                  )}
-                </button>
-                {selectedRunId && successRuns.find(r => r.id === selectedRunId)?.status === "DRAFT" && (
-                  <button onClick={handlePublish} className="px-4 py-2 bg-emerald-600 border border-emerald-500 text-white rounded font-bold text-xs uppercase tracking-wider hover:bg-emerald-500 transition-all shadow-[0_2px_10px_rgba(16,185,129,0.2)] hover:shadow-[0_4px_15px_rgba(16,185,129,0.3)] whitespace-nowrap">
-                    Publish
-                  </button>
-                )}
-             </div>
-
-             {/* Variant selector */}
-             {successRuns.length > 0 && (
-                <div className="flex items-center gap-1.5 bg-slate-900/60 p-1 rounded-md border border-slate-700/50 shadow-inner overflow-x-auto custom-scrollbar">
-                  <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest pl-2 pr-1 shrink-0">Variants</span>
-                  {successRuns.slice(0, 3).map((r, i) => (
-                    <button key={r.id} onClick={() => setSelectedRunId(r.id)}
-                      className={`px-3.5 py-1.5 rounded text-[11px] font-bold transition-all shrink-0 ${
-                        r.id === selectedRunId 
-                          ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-[inset_0_1px_3px_rgba(0,0,0,0.2)]" 
-                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-transparent"
-                      }`}>
-                      V{i + 1}
-                    </button>
-                  ))}
+          {/* AI OPERATOR BOTTOM BAR (HUD) */}
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[80%] max-w-[800px] z-50">
+             <div className="bg-[#111318]/90 border border-white/10 backdrop-blur-3xl p-3 rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] flex flex-col gap-2">
+               
+               {/* Activity Log (Mini) */}
+               {aiLogs.length > 0 && (
+                 <div className="px-4 py-2 border-b border-white/5 max-h-20 overflow-y-auto custom-scrollbar flex flex-col gap-1">
+                    {aiLogs.slice(-3).map((log, idx) => (
+                       <motion.div initial={{opacity:0, x:-10}} animate={{opacity:1, x:0}} key={idx} className={`text-[10px] font-mono flex items-center gap-2 ${log.includes("✓") ? "text-[#9bffce]" : log.includes("✗") ? "text-[#ff716c]" : "text-[#aaabb0]"}`}>
+                          {log}
+                       </motion.div>
+                    ))}
                  </div>
-              )}
-           </div>
+               )}
 
-           {/* DEBUG UI - Always visible */}
-           <div className="flex items-center gap-2 bg-slate-900/40 px-3 py-1.5 rounded border border-slate-700/50 shrink-0">
-              <div className="text-[10px] text-amber-400 font-mono">
-                Runs: <span className="font-bold">{runs.length}</span> | 
-                Success: <span className="font-bold">{successRuns.length}</span> | 
-                Selected: <span className="font-bold">{selectedRunId || "none"}</span>
-              </div>
-           </div>
-
-           {/* AI Operator */}
-          <div className="relative shrink-0">
-            <button onClick={() => setAiActionOpen(!aiActionOpen)}
-              className={`px-4 py-2 rounded font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all border shadow-sm ${
-                aiActionOpen 
-                  ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300 shadow-[0_0_15px_rgba(79,70,229,0.2)]" 
-                  : "bg-slate-900 border-slate-700 text-slate-400 hover:text-indigo-300 hover:border-indigo-500/30"
-              }`}>
-              <span className="text-sm">🪄</span> Operator <span className={`text-[10px] transform transition-transform duration-300 ${aiActionOpen ? "rotate-180" : ""}`}>▴</span>
-            </button>
-            
-            {aiActionOpen && (
-              <div className="absolute bottom-[115%] right-0 w-[280px] bg-slate-800 border border-indigo-500/30 rounded-lg shadow-[0_5px_30px_rgba(0,0,0,0.5)] overflow-hidden origin-bottom-right z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                <div className="p-3 border-b border-slate-700/50 bg-slate-900/80 backdrop-blur">
-                   <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1.5">
-                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
-                     Live Overrides
-                   </p>
-                </div>
-                {selectedRunId ? (
-                  <div className="p-2.5 flex flex-col gap-1.5">
-                    <button onClick={() => handleAiAction("optimize")} disabled={aiWorking} className="px-3.5 py-2.5 bg-slate-900/40 hover:bg-indigo-600 text-[11px] font-semibold text-slate-300 hover:text-white rounded border border-slate-700/50 hover:border-indigo-500 transition-all text-left flex justify-between items-center group">
-                      <span>Optimize Layout</span>
-                      <span className="opacity-0 group-hover:opacity-100 transform translate-x-1 group-hover:translate-x-0 transition-all">→</span>
-                    </button>
-                    <button onClick={() => handleAiAction("reduce_clashes")} disabled={aiWorking} className="px-3.5 py-2.5 bg-slate-900/40 hover:bg-emerald-600 text-[11px] font-semibold text-slate-300 hover:text-white rounded border border-slate-700/50 hover:border-emerald-500 transition-all text-left flex justify-between items-center group">
-                      <span>Remove Clashes</span>
-                      <span className="opacity-0 group-hover:opacity-100 transform translate-x-1 group-hover:translate-x-0 transition-all">→</span>
-                    </button>
-                     <button onClick={() => handleAiAction("balance")} disabled={aiWorking} className="px-3.5 py-2.5 bg-slate-900/40 hover:bg-amber-600 text-[11px] font-semibold text-slate-300 hover:text-white rounded border border-slate-700/50 hover:border-amber-500 transition-all text-left flex justify-between items-center group">
-                       <span>Balance Loads</span>
-                       <span className="opacity-0 group-hover:opacity-100 transform translate-x-1 group-hover:translate-x-0 transition-all">→</span>
+               <div className="flex items-center gap-3 px-2">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#8ff5ff] to-[#c180ff] flex items-center justify-center shadow-[0_0_15px_rgba(143,245,255,0.4)] shrink-0">
+                     <span className="text-sm shadow-inner">🪄</span>
+                  </div>
+                  <input
+                     type="text"
+                     value={aiInput}
+                     onChange={(e) => setAiInput(e.target.value)}
+                     onKeyDown={(e) => e.key === 'Enter' && handleAiCustomAction()}
+                     placeholder="Command the AI (e.g., 'Optimize layout', 'Move ML to Monday 1st slot')..."
+                     disabled={aiWorking}
+                     className="flex-1 bg-transparent border-none outline-none text-[#f6f6fc] text-sm placeholder:text-[#53555a] placeholder:font-medium font-inter h-10 px-2"
+                  />
+                  {aiWorking ? (
+                     <div className="w-6 h-6 border-2 border-[#8ff5ff] border-t-transparent rounded-full animate-spin shrink-0 mr-2" />
+                  ) : (
+                     <button
+                        onClick={handleAiCustomAction}
+                        disabled={!aiInput.trim()}
+                        className="px-5 py-2 bg-white/10 hover:bg-[#8ff5ff]/20 text-[#8ff5ff] rounded-full text-xs font-bold transition-all disabled:opacity-30 tracking-widest uppercase border border-white/5 hover:border-[#8ff5ff]/50"
+                     >
+                        Execute
                      </button>
-
-                     {/* Custom Input */}
-                     <div className="mt-2 pt-2 border-t border-slate-700/30">
-                       <div className="flex gap-1.5">
-                         <input
-                           type="text"
-                           value={aiInput}
-                           onChange={(e) => setAiInput(e.target.value)}
-                           onKeyDown={(e) => e.key === 'Enter' && handleAiCustomAction()}
-                           placeholder="Ask AI to modify schedule..."
-                           disabled={aiWorking}
-                           className="flex-1 px-2 py-1.5 bg-slate-900 border border-slate-600 rounded text-[10px] text-slate-200 placeholder:text-slate-600 outline-none focus:ring-1 focus:ring-indigo-500/50"
-                         />
-                         <button
-                           onClick={handleAiCustomAction}
-                           disabled={aiWorking || !aiInput.trim()}
-                           className="px-2 py-1.5 bg-indigo-600 text-white rounded text-[10px] font-bold hover:bg-indigo-500 disabled:opacity-40 transition-colors"
-                         >
-                           Send
-                         </button>
-                       </div>
-                     </div>
-
-                     {/* AI Logs */}
-                     {aiLogs.length > 0 && (
-                       <div className="mt-2 pt-2 border-t border-slate-700/30 max-h-24 overflow-y-auto custom-scrollbar">
-                         <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Action Log</div>
-                         <div className="space-y-0.5">
-                           {aiLogs.slice(-5).map((log, idx) => (
-                             <div key={idx} className="text-[9px] text-slate-400 font-mono truncate">
-                               {log}
-                             </div>
-                           ))}
-                         </div>
-                       </div>
-                     )}
-
-                     {aiWorking && <div className="text-[10px] text-indigo-400 font-bold tracking-widest uppercase animate-pulse text-center pt-3 pb-1">Analyzing vectors</div>}
-                    {aiDiag && !aiWorking && (
-                      <div className="pt-2 mt-1.5 border-t border-slate-700/50 px-2 pb-1">
-                        <p className="text-[10px] font-medium text-amber-400 leading-relaxed text-center">{aiDiag}</p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-5 text-[11px] font-medium text-amber-500/80 text-center flex flex-col items-center gap-2">
-                    <span className="text-2xl">⚠️</span>
-                    Waiting for initial variant.
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+               </div>
+             </div>
           </div>
-
         </div>
       </div>
-
-      {/* ═══ HIERARCHY MODAL ═══ */}
-      {hierarchyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md flex flex-col shadow-2xl">
-            <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-200">Batch Structure Info</h3>
-              <button onClick={() => setHierarchyModalOpen(false)} className="text-slate-500 hover:text-slate-300">✕</button>
-            </div>
-            <div className="p-4 overflow-y-auto max-h-[60vh] space-y-3 custom-scrollbar">
-               {buildBatchTree.map(parent => (
-                  <div key={parent.id} className="bg-slate-900/50 rounded p-3 border border-slate-700/50">
-                    <p className="text-xs font-bold text-indigo-300">{parent.name} <span className="text-slate-500 font-normal">({parent.size} slots)</span></p>
-                    {parent.children && parent.children.length > 0 && (
-                      <div className="mt-2 pl-3 border-l-2 border-slate-700/50 space-y-1.5">
-                        {parent.children.map(child => (
-                           <div key={child.id} className="text-[11px] text-slate-300 flex justify-between">
-                             <span>{child.name}</span>
-                             <span className="text-slate-500">{child.size} slots</span>
-                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-               ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Added simple global styles to slim scrollbars for panel cleanups */}
       <style dangerouslySetInnerHTML={{__html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

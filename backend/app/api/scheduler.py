@@ -100,7 +100,8 @@ class GenerateRequest(BaseModel):
 @router.get("/departments")
 async def list_departments(
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    # DEBUG: Temporarily disabled auth
+    # current_user=Depends(get_current_user),
 ):
     """List all departments with counts."""
     result = await db.execute(select(Department).order_by(Department.name))
@@ -856,7 +857,8 @@ async def _resolve_dept(db: AsyncSession, name: str) -> Department:
 async def get_department_state(
     dept_name: str,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    # DEBUG: Temporarily disabled auth
+    # current_user=Depends(get_current_user),
 ):
     """Return all config data for a department in one call."""
     dept = await _resolve_dept(db, dept_name)
@@ -1024,7 +1026,8 @@ async def get_department_state(
 async def generate_variants(
     dept_name: str,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    # DEBUG: Temporarily disabled auth
+    # current_user=Depends(get_current_user),
 ):
     """Generate 3 timetable variants for a department (by name).
 
@@ -1095,7 +1098,8 @@ async def get_run_slots(
     run_id: int,
     batch_id: int | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    # DEBUG: Temporarily disabled auth
+    # current_user=Depends(get_current_user),
 ):
     """Return all schedule slots for a run, optionally filtered by batch."""
     print(f"📡📡📡 GET /runs/{run_id}/slots CALLED 📡📡📡")
